@@ -206,7 +206,11 @@ def player_stats_page():
             
             # Filter options
             max_games = int(batting_df['games'].max()) if 'games' in batting_df.columns and len(batting_df) > 0 else 1
-            min_games = st.slider("Minimum games played", 1, max(1, max_games), 1)
+            if max_games > 1:
+                min_games = st.slider("Minimum games played", 1, max_games, 1)
+            else:
+                min_games = 1
+                st.info("All players have played 1 game or less. Showing all available data.")
             filtered_batting = batting_df[batting_df['games'] >= min_games] if 'games' in batting_df.columns else batting_df
             
             st.dataframe(filtered_batting, use_container_width=True)
@@ -243,7 +247,11 @@ def player_stats_page():
             
             # Filter options
             max_games = int(pitching_df['games'].max()) if 'games' in pitching_df.columns and len(pitching_df) > 0 else 1
-            min_games = st.slider("Minimum games pitched", 1, max(1, max_games), 1, key="pitching_filter")
+            if max_games > 1:
+                min_games = st.slider("Minimum games pitched", 1, max_games, 1, key="pitching_filter")
+            else:
+                min_games = 1
+                st.info("All pitchers have pitched 1 game or less. Showing all available data.")
             filtered_pitching = pitching_df[pitching_df['games'] >= min_games] if 'games' in pitching_df.columns else pitching_df
             
             st.dataframe(filtered_pitching, use_container_width=True)
