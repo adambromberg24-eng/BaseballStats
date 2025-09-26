@@ -85,42 +85,35 @@ class MLBApiClient:
                 'away_team_pitching': []
             }
             
-            # Extract batting statistics
-            if 'teamStats' in box_score:
-                home_stats = box_score['teamStats'].get('home', {})
-                away_stats = box_score['teamStats'].get('away', {})
-                
-                # Process home team batting
-                if 'batting' in home_stats:
-                    for player_id, player_stats in home_stats['batting'].items():
-                        if player_id.isdigit():  # Skip team totals
-                            batting_data = self._extract_batting_stats(player_stats, box_score)
-                            if batting_data:
-                                game_data['home_team_batting'].append(batting_data)
-                
-                # Process away team batting
-                if 'batting' in away_stats:
-                    for player_id, player_stats in away_stats['batting'].items():
-                        if player_id.isdigit():  # Skip team totals
-                            batting_data = self._extract_batting_stats(player_stats, box_score)
-                            if batting_data:
-                                game_data['away_team_batting'].append(batting_data)
-                
-                # Process home team pitching
-                if 'pitching' in home_stats:
-                    for player_id, player_stats in home_stats['pitching'].items():
-                        if player_id.isdigit():  # Skip team totals
-                            pitching_data = self._extract_pitching_stats(player_stats, box_score)
-                            if pitching_data:
-                                game_data['home_team_pitching'].append(pitching_data)
-                
-                # Process away team pitching
-                if 'pitching' in away_stats:
-                    for player_id, player_stats in away_stats['pitching'].items():
-                        if player_id.isdigit():  # Skip team totals
-                            pitching_data = self._extract_pitching_stats(player_stats, box_score)
-                            if pitching_data:
-                                game_data['away_team_pitching'].append(pitching_data)
+            # Extract batting statistics from homeBatters and awayBatters
+            if 'homeBatters' in box_score:
+                for player_stats in box_score['homeBatters']:
+                    if player_stats.get('personId', 0) > 0:  # Skip header row (personId = 0)
+                        batting_data = self._extract_batting_stats(player_stats, box_score)
+                        if batting_data:
+                            game_data['home_team_batting'].append(batting_data)
+            
+            if 'awayBatters' in box_score:
+                for player_stats in box_score['awayBatters']:
+                    if player_stats.get('personId', 0) > 0:  # Skip header row (personId = 0)
+                        batting_data = self._extract_batting_stats(player_stats, box_score)
+                        if batting_data:
+                            game_data['away_team_batting'].append(batting_data)
+            
+            # Extract pitching statistics from homePitchers and awayPitchers
+            if 'homePitchers' in box_score:
+                for player_stats in box_score['homePitchers']:
+                    if player_stats.get('personId', 0) > 0:  # Skip header row (personId = 0)
+                        pitching_data = self._extract_pitching_stats(player_stats, box_score)
+                        if pitching_data:
+                            game_data['home_team_pitching'].append(pitching_data)
+            
+            if 'awayPitchers' in box_score:
+                for player_stats in box_score['awayPitchers']:
+                    if player_stats.get('personId', 0) > 0:  # Skip header row (personId = 0)
+                        pitching_data = self._extract_pitching_stats(player_stats, box_score)
+                        if pitching_data:
+                            game_data['away_team_pitching'].append(pitching_data)
             
             return game_data
             
@@ -136,20 +129,27 @@ class MLBApiClient:
             # Get player name from roster data
             player_name = self._get_player_name(player_id, box_score)
             
+            # Convert string values to integers, handling empty strings
+            def safe_int(value):
+                try:
+                    return int(value) if value and value != '' else 0
+                except (ValueError, TypeError):
+                    return 0
+            
             return {
                 'player_id': player_id,
                 'name': player_name,
-                'at_bats': player_stats.get('atBats', 0),
-                'hits': player_stats.get('hits', 0),
-                'runs': player_stats.get('runs', 0),
-                'rbis': player_stats.get('rbi', 0),
-                'doubles': player_stats.get('doubles', 0),
-                'triples': player_stats.get('triples', 0),
-                'home_runs': player_stats.get('homeRuns', 0),
-                'walks': player_stats.get('baseOnBalls', 0),
-                'strikeouts': player_stats.get('strikeOuts', 0),
-                'stolen_bases': player_stats.get('stolenBases', 0),
-                'caught_stealing': player_stats.get('caughtStealing', 0)
+                'at_bats': safe_int(player_stats.get('ab', 0)),
+                'hits': safe_int(player_stats.get('h', 0)),
+                'runs': safe_int(player_stats.get('r', 0)),
+                'rbis': safe_int(player_stats.get('rbi', 0)),
+                'doubles': safe_int(player_stats.get('doubles', 0)),
+                'triples': safe_int(player_stats.get('triples', 0)),
+                'home_runs': safe_int(player_stats.get('hr', 0)),
+                'walks': safe_int(player_stats.get('bb', 0)),
+                'strikeouts': safe_int(player_stats.get('k', 0)),
+                'stolen_bases': safe_int(player_stats.get('sb', 0)),
+                'caught_stealing': 0  # Not available in this format
             }
         except Exception as e:
             print(f"Error extracting batting stats: {e}")
@@ -163,20 +163,45 @@ class MLBApiClient:
             # Get player name from roster data
             player_name = self._get_player_name(player_id, box_score)
             
+            # Convert string values to appropriate types, handling empty strings
+            def safe_int(value):
+                try:
+                    return int(value) if value and value != '' else 0
+                except (ValueError, TypeError):
+                    return 0
+            
+            def safe_float(value):
+                try:
+                    return float(value) if value and value != '' else 0.0
+                except (ValueError, TypeError):
+                    return 0.0
+            
+            # Parse wins/losses from namefield (e.g., "Lodolo  (W, 9-8)")
+            wins = 0
+            losses = 0
+            saves = 0
+            namefield = player_stats.get('namefield', '')
+            if '(W,' in namefield:
+                wins = 1
+            elif '(L,' in namefield:
+                losses = 1
+            elif '(S,' in namefield:
+                saves = 1
+            
             return {
                 'player_id': player_id,
                 'name': player_name,
-                'wins': player_stats.get('wins', 0),
-                'losses': player_stats.get('losses', 0),
-                'saves': player_stats.get('saves', 0),
-                'innings_pitched': float(player_stats.get('inningsPitched', 0)),
-                'hits_allowed': player_stats.get('hits', 0),
-                'runs_allowed': player_stats.get('runs', 0),
-                'earned_runs': player_stats.get('earnedRuns', 0),
-                'walks_allowed': player_stats.get('baseOnBalls', 0),
-                'strikeouts': player_stats.get('strikeOuts', 0),
-                'home_runs_allowed': player_stats.get('homeRuns', 0),
-                'pitches_thrown': player_stats.get('numberOfPitches', 0)
+                'wins': wins,
+                'losses': losses,
+                'saves': saves,
+                'innings_pitched': safe_float(player_stats.get('ip', 0)),
+                'hits_allowed': safe_int(player_stats.get('h', 0)),
+                'runs_allowed': safe_int(player_stats.get('r', 0)),
+                'earned_runs': safe_int(player_stats.get('er', 0)),
+                'walks_allowed': safe_int(player_stats.get('bb', 0)),
+                'strikeouts': safe_int(player_stats.get('k', 0)),
+                'home_runs_allowed': safe_int(player_stats.get('hr', 0)),
+                'pitches_thrown': safe_int(player_stats.get('p', 0))
             }
         except Exception as e:
             print(f"Error extracting pitching stats: {e}")
@@ -185,11 +210,12 @@ class MLBApiClient:
     def _get_player_name(self, player_id: str, box_score: Dict) -> str:
         """Get player name from box score data"""
         try:
-            # Look in player info section
+            # Look in player info section using the correct key format
             if 'playerInfo' in box_score:
-                for player_info in box_score['playerInfo']:
-                    if str(player_info.get('id', '')) == player_id:
-                        return player_info.get('fullName', f'Player {player_id}')
+                player_key = f'ID{player_id}'
+                if player_key in box_score['playerInfo']:
+                    player_info = box_score['playerInfo'][player_key]
+                    return player_info.get('fullName', f'Player {player_id}')
             
             # Fallback to generic name
             return f'Player {player_id}'
