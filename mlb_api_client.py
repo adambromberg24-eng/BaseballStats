@@ -17,7 +17,7 @@ class MLBApiClient:
             teams_data = statsapi.get('teams', {'sportId': 1})
             teams = []
             
-            if 'teams' in teams_data:
+            if teams_data and 'teams' in teams_data:
                 for team in teams_data['teams']:
                     teams.append({
                         'id': team.get('id'),
@@ -203,7 +203,7 @@ class MLBApiClient:
         try:
             player_data = statsapi.get('person', {'personId': player_id})
             
-            if 'people' in player_data and len(player_data['people']) > 0:
+            if player_data and 'people' in player_data and len(player_data['people']) > 0:
                 player = player_data['people'][0]
                 return {
                     'id': player.get('id'),

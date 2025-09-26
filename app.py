@@ -205,7 +205,8 @@ def player_stats_page():
                     st.metric("Total Home Runs", total_hrs)
             
             # Filter options
-            min_games = st.slider("Minimum games played", 1, max(1, batting_df['games'].max() if 'games' in batting_df.columns else 1), 1)
+            max_games = int(batting_df['games'].max()) if 'games' in batting_df.columns and len(batting_df) > 0 else 1
+            min_games = st.slider("Minimum games played", 1, max(1, max_games), 1)
             filtered_batting = batting_df[batting_df['games'] >= min_games] if 'games' in batting_df.columns else batting_df
             
             st.dataframe(filtered_batting, use_container_width=True)
@@ -241,7 +242,8 @@ def player_stats_page():
                     st.metric("Total Earned Runs", total_er)
             
             # Filter options
-            min_games = st.slider("Minimum games pitched", 1, max(1, pitching_df['games'].max() if 'games' in pitching_df.columns else 1), 1, key="pitching_filter")
+            max_games = int(pitching_df['games'].max()) if 'games' in pitching_df.columns and len(pitching_df) > 0 else 1
+            min_games = st.slider("Minimum games pitched", 1, max(1, max_games), 1, key="pitching_filter")
             filtered_pitching = pitching_df[pitching_df['games'] >= min_games] if 'games' in pitching_df.columns else pitching_df
             
             st.dataframe(filtered_pitching, use_container_width=True)
@@ -284,7 +286,8 @@ def dashboard_page():
         team_counts[away_team] = team_counts.get(away_team, 0) + 1
     
     if team_counts:
-        teams_df = pd.DataFrame(list(team_counts.items()), columns=['Team', 'Games'])
+        teams_df = pd.DataFrame(list(team_counts.items()))
+        teams_df.columns = ['Team', 'Games']
         teams_df = teams_df.sort_values('Games', ascending=True).tail(10)
         
         fig_teams = px.bar(teams_df, x='Games', y='Team', orientation='h',

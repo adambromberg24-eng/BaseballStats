@@ -47,3 +47,7 @@ args = "uv add pandas plotly statsapi"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 45265
+externalPort = 3000
