@@ -1,0 +1,24 @@
+{
+  "games": [
+    {
+      "game_id": 776184,
+      "date": "2025-09-25",
+      "home_team": "New York Yankees",
+      "away_team": "Chicago White Sox",
+      "home_team_id": 147,
+      "away_team_id": 145,
+      "home_score": 5,
+      "away_score": 3,
+      "game_status": "Final",
+      "venue": "Yankee Stadium",
+      "home_team_batting": [],
+      "away_team_batting": [],
+      "home_team_pitching": [],
+      "away_team_pitching": [],
+      "notes": "with jake",
+      "added_at": "2025-09-26T15:23:38.187056"
+    }
+  ],
+  "created_at": "2025-09-26T15:23:20.811825",
+  "updated_at": "2025-09-26T15:23:38.187072"
+}
