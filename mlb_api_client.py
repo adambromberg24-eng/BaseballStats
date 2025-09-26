@@ -176,6 +176,32 @@ class MLBApiClient:
                 except (ValueError, TypeError):
                     return 0.0
             
+            def parse_innings(innings_str):
+                """Parse baseball innings notation (e.g., '6.1' = 6⅓ innings)"""
+                try:
+                    if not innings_str or innings_str == '':
+                        return 0.0
+                    
+                    innings_str = str(innings_str)
+                    if '.' in innings_str:
+                        whole, fraction = innings_str.split('.')
+                        whole_innings = int(whole) if whole else 0
+                        
+                        # Convert baseball fractional notation to decimal
+                        if fraction == '1':
+                            fraction_decimal = 1/3  # 1 out = 1/3 inning
+                        elif fraction == '2':
+                            fraction_decimal = 2/3  # 2 outs = 2/3 inning
+                        else:
+                            # Handle other cases (shouldn't happen in baseball)
+                            fraction_decimal = int(fraction) / 3 if fraction.isdigit() else 0
+                        
+                        return whole_innings + fraction_decimal
+                    else:
+                        return float(innings_str)
+                except (ValueError, TypeError):
+                    return 0.0
+            
             # Parse wins/losses from namefield (e.g., "Lodolo  (W, 9-8)")
             wins = 0
             losses = 0
@@ -194,7 +220,7 @@ class MLBApiClient:
                 'wins': wins,
                 'losses': losses,
                 'saves': saves,
-                'innings_pitched': safe_float(player_stats.get('ip', 0)),
+                'innings_pitched': parse_innings(player_stats.get('ip', 0)),
                 'hits_allowed': safe_int(player_stats.get('h', 0)),
                 'runs_allowed': safe_int(player_stats.get('r', 0)),
                 'earned_runs': safe_int(player_stats.get('er', 0)),
