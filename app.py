@@ -319,15 +319,21 @@ def my_games_page():
             remove_btn_label = f"Remove Game {idx+1} ({away_team} @ {home_team})"
             if st.button("🗑️ Remove Game", key=f"remove_game_{idx}"):
                 # Remove game using its unique properties instead of index
-                success = st.session_state.data_manager.remove_game_by_properties(
-                    game.get('date'), 
-                    game.get('home_team_id'), 
-                    game.get('away_team_id'),
-                    game.get('game_number')
-                )
-                if success:
-                    st.success("Game removed successfully!")
-                    st.rerun()
+                try:
+                    success = st.session_state.data_manager.remove_game_by_properties(
+                        game.get('date'), 
+                        game.get('home_team_id'), 
+                        game.get('away_team_id'),
+                        game.get('game_number')
+                    )
+                    if success:
+                        st.success("Game removed successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to remove game. Please try again.")
+                except Exception as e:
+                    st.error(f"Error removing game: {str(e)}")
+                    print(f"Error in remove game button: {e}")
 
     # Optionally, keep the detailed info section if needed
     if st.checkbox("Show detailed game information"):

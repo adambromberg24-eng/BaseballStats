@@ -133,13 +133,40 @@ class DataManager:
     def remove_game_by_properties(self, date: str, home_team_id: int, away_team_id: int, game_number: int = None) -> bool:
         """Remove a game by its unique properties"""
         try:
+            # Convert team IDs to integers to handle string inputs
+            try:
+                home_team_id = int(home_team_id) if home_team_id is not None else None
+                away_team_id = int(away_team_id) if away_team_id is not None else None
+            except (ValueError, TypeError):
+                print(f"DEBUG: Invalid team IDs - home: {home_team_id}, away: {away_team_id}")
+                return False
+                
+            # Convert game_number to int if provided
+            if game_number is not None:
+                try:
+                    game_number = int(game_number)
+                except (ValueError, TypeError):
+                    game_number = None
+                    
+            print(f"DEBUG: Removing game with properties - date: {date}, home_team_id: {home_team_id}, away_team_id: {away_team_id}, game_number: {game_number}")
+                    
             for i, game in enumerate(self.data["games"]):
+                # Convert stored team IDs to int for comparison
+                stored_home_id = int(game.get('home_team_id')) if game.get('home_team_id') is not None else None
+                stored_away_id = int(game.get('away_team_id')) if game.get('away_team_id') is not None else None
+                stored_game_number = int(game.get('game_number')) if game.get('game_number') is not None else None
+                
                 if (game.get('date') == date and 
-                    game.get('home_team_id') == home_team_id and 
-                    game.get('away_team_id') == away_team_id and
-                    game.get('game_number') == game_number):
+                    stored_home_id == home_team_id and 
+                    stored_away_id == away_team_id and
+                    stored_game_number == game_number):
+                    print(f"DEBUG: Found matching game at index {i}, removing...")
                     self.data["games"].pop(i)
-                    return self._save_data()
+                    save_result = self._save_data()
+                    print(f"DEBUG: Game removal save result: {save_result}")
+                    return save_result
+            
+            print(f"DEBUG: No matching game found for removal")
             return False
         except Exception as e:
             print(f"Error removing game by properties: {e}")
