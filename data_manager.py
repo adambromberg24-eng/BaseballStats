@@ -33,21 +33,70 @@ class DataManager:
             return False
     
     def add_game(self, game_data: Dict[str, Any], notes: str = "") -> bool:
-        """Add a new game to the database"""
+        """Add a new game to the database with validation"""
         try:
-            # Check if game already exists
-            game_id = f"{game_data.get('date')}_{game_data.get('home_team_id')}_{game_data.get('away_team_id')}"
+            # Validate game data
+            if not self._validate_game_data(game_data):
+                return False
+                
+            # Check if game already exists - modified for doubleheader support
+            base_game_id = f"{game_data.get('date')}_{game_data.get('home_team_id')}_{game_data.get('away_team_id')}"
+            
+            # For the new game, create the full ID
+            game_id = base_game_id
+            
+            is_doubleheader = game_data.get('is_doubleheader')
+            game_number = game_data.get('game_number')
+            
+            # Handle different boolean representations (True, "true", 1, etc.)
+            if is_doubleheader in [True, "true", "True", 1, "1"]:
+                is_doubleheader = True
+            else:
+                is_doubleheader = False
+            
+            # Handle different number representations
+            if game_number is not None:
+                try:
+                    game_number = int(game_number)
+                except (ValueError, TypeError):
+                    game_number = None
+            
+            if is_doubleheader and game_number:
+                game_id += f"_game{game_number}"
             
             for existing_game in self.data["games"]:
-                existing_id = f"{existing_game.get('date')}_{existing_game.get('home_team_id')}_{existing_game.get('away_team_id')}"
+                existing_base_id = f"{existing_game.get('date')}_{existing_game.get('home_team_id')}_{existing_game.get('away_team_id')}"
+                
+                # For existing games, create the full ID
+                existing_id = existing_base_id
+                if existing_game.get('is_doubleheader') and existing_game.get('game_number'):
+                    existing_id += f"_game{existing_game.get('game_number')}"
+                elif existing_game.get('game_number'):
+                    # Handle case where game_number exists but is_doubleheader is False/missing
+                    existing_id += f"_game{existing_game.get('game_number')}"
+                
+                # Exact match - this is a duplicate
                 if existing_id == game_id:
-                    return False  # Game already exists
+                    return False
+                
+                # Special case: if we're adding a doubleheader game and there's an existing game 
+                # with the same base ID but no game number, we need to handle this differently
+                if (game_data.get('is_doubleheader') and game_data.get('game_number') and 
+                    existing_base_id == base_game_id and 
+                    not existing_game.get('game_number')):
+                    # This is allowed - different games in the doubleheader
+                    continue
             
-            # Add notes to game data
+            # Sanitize notes
+            notes = self._sanitize_notes(notes)
+            
+            # Add metadata to game data
             game_data["notes"] = notes
             game_data["added_at"] = datetime.now().isoformat()
+            game_data["version"] = "1.0"
             
             self.data["games"].append(game_data)
+            
             return self._save_data()
         except Exception as e:
             print(f"Error adding game: {e}")
@@ -102,3 +151,40 @@ class DataManager:
         except Exception as e:
             print(f"Error clearing data: {e}")
             return False
+    
+    def _validate_game_data(self, game_data: Dict[str, Any]) -> bool:
+        """Validate game data structure and required fields"""
+        required_fields = ['date', 'home_team', 'away_team', 'home_team_id', 'away_team_id']
+        
+        # Check required fields
+        for field in required_fields:
+            if field not in game_data or not game_data[field]:
+                return False
+        
+        # Validate date format
+        try:
+            datetime.strptime(game_data['date'], '%Y-%m-%d')
+        except ValueError:
+            return False
+        
+        # Validate team IDs are integers
+        try:
+            int(game_data['home_team_id'])
+            int(game_data['away_team_id'])
+        except (ValueError, TypeError):
+            return False
+        
+        # Validate scores if present
+        if 'home_score' in game_data and game_data['home_score'] is not None:
+            try:
+                int(game_data['home_score'])
+            except (ValueError, TypeError):
+                return False
+                
+        if 'away_score' in game_data and game_data['away_score'] is not None:
+            try:
+                int(game_data['away_score'])
+            except (ValueError, TypeError):
+                return False
+        
+        return True

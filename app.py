@@ -5,10 +5,26 @@ import plotly.graph_objects as go
 from datetime import datetime, date
 import json
 import os
+import time
 from data_manager import DataManager
 from stats_calculator import StatsCalculator
 from mlb_api_client import MLBApiClient
 from auth_manager import AuthManager
+
+def format_game_display_name(game):
+    """Create a descriptive display name for games, including doubleheader info"""
+    base_name = f"{game.get('date')} - {game.get('away_team')} @ {game.get('home_team')}"
+    
+    # Add score info
+    base_name += f" ({game.get('away_score')}-{game.get('home_score')})"
+    
+    # Add doubleheader info if applicable
+    if game.get('is_doubleheader') and game.get('game_number'):
+        base_name += f" - Game {game.get('game_number')}"
+    elif game.get('game_number'):
+        base_name += f" - Game {game.get('game_number')}"
+    
+    return base_name
 
 def main():
     st.set_page_config(
@@ -89,69 +105,176 @@ def main():
 def add_game_page():
     st.header("Add New Game")
     
+    # Add some helpful information
+    with st.expander("ℹ️ How to Add a Game"):
+        st.write("""
+        1. Select the home and away teams from the dropdown menus
+        2. Choose the date you attended the game
+        3. Optionally add notes about your experience
+        4. Click 'Add Game' to fetch the official MLB statistics
+        
+        **Note:** Only completed games can be added to ensure accurate statistics.
+        """)
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        # Get list of MLB teams
-        teams = st.session_state.mlb_client.get_teams()
+        # Get list of MLB teams with error handling
+        with st.spinner("Loading MLB teams..."):
+            teams = st.session_state.mlb_client.get_teams()
+            
         if teams:
             team_options = {f"{team['name']} ({team['abbreviation']})": team['id'] for team in teams}
             
             home_team = st.selectbox(
-                "Home Team",
+                "🏠 Home Team",
                 options=list(team_options.keys()),
-                help="Select the home team"
+                help="Select the home team",
+                key="home_team_select"
             )
             
             away_team = st.selectbox(
-                "Away Team", 
+                "✈️ Away Team", 
                 options=list(team_options.keys()),
-                help="Select the away team"
+                help="Select the away team",
+                key="away_team_select"
             )
+            
+            # Show a warning if same team is selected
+            if home_team and away_team and home_team == away_team:
+                st.warning("⚠️ Home and away teams cannot be the same!")
+                
         else:
-            st.error("Unable to load team data. Please check your connection.")
+            st.error("❌ Unable to load team data. Please refresh the page or check your internet connection.")
+            if st.button("🔄 Retry Loading Teams"):
+                st.rerun()
             return
     
     with col2:
         game_date = st.date_input(
-            "Game Date",
+            "📅 Game Date",
             value=date.today(),
             max_value=date.today(),
-            help="Select the date of the game you attended"
+            help="Select the date of the game you attended",
+            key="game_date_input"
         )
         
         notes = st.text_area(
-            "Notes (Optional)",
-            placeholder="Add any notes about the game..."
+            "📝 Notes (Optional)",
+            placeholder="Add any notes about the game (e.g., weather, highlights, seat location)...",
+            height=100,
+            key="game_notes_input"
         )
     
-    if st.button("Add Game", type="primary"):
-        if home_team and away_team and game_date:
-            if home_team == away_team:
-                st.error("Home and away teams cannot be the same!")
-                return
-            home_team_id = team_options[home_team]
-            away_team_id = team_options[away_team]
-            with st.spinner("Fetching game data from MLB API..."):
-                game_data = st.session_state.mlb_client.get_game_data(
-                    home_team_id, away_team_id, game_date
-                )
-                # Box score is already included in game_data from get_game_data
-                if game_data:
-                    st.write("Debug - Game data structure:", list(game_data.keys()))
-            if game_data:
-                # Save the game
-                success = st.session_state.data_manager.add_game(
-                    game_data, notes
-                )
-                
-                if success:
-                    st.success("Game added successfully!")
-                    st.rerun()
-                else:
-                    st.error("Failed to save game data.")
+    # Add validation and better user feedback
+    can_add_game = home_team and away_team and game_date and home_team != away_team
+    
+    if st.button("⚾ Add Game", type="primary", disabled=not can_add_game):
+        if not can_add_game:
+            st.error("Please select different home and away teams and a valid date.")
+            return
+            
+        home_team_id = team_options[home_team]
+        away_team_id = team_options[away_team]
+        
+        # First check if multiple games exist
+        try:
+            game_options = st.session_state.mlb_client.get_game_options(
+                home_team_id, away_team_id, game_date
+            )
+        except AttributeError:
+            # Fallback if method doesn't exist (shouldn't happen now)
+            st.warning("Using fallback method for game detection...")
+            game_data = st.session_state.mlb_client.get_game_data(
+                home_team_id, away_team_id, game_date
+            )
+            if game_data and game_data.get('multiple_games'):
+                game_options = game_data['multiple_games']
             else:
-                st.error("No game found for the selected teams and date. Please verify the details.")
+                game_options = []
+        except Exception as e:
+            st.error(f"Error getting game options: {e}")
+            game_options = []
+        
+        if len(game_options) > 1:
+            # Store game options in session state for selection
+            st.session_state.game_options = game_options
+            st.session_state.pending_teams = (home_team_id, away_team_id, game_date, notes)
+            st.rerun()
+        else:
+            # Single game - fetch directly
+            game_data = st.session_state.mlb_client.get_game_data(
+                home_team_id, away_team_id, game_date
+            )
+            if game_data:
+                st.session_state.selected_game_data = game_data
+                st.session_state.pending_notes = notes
+                st.rerun()
+    
+    # Handle multiple game selection
+    if hasattr(st.session_state, 'game_options') and st.session_state.game_options:
+        st.info(f"🔄 Found {len(st.session_state.game_options)} games for this matchup!")
+        
+        selected_game = st.selectbox(
+            "Select which game to add:",
+            range(len(st.session_state.game_options)),
+            format_func=lambda x: st.session_state.game_options[x]['description'],
+            key="game_selection"
+        )
+        
+        if st.button("📥 Fetch Selected Game", type="secondary"):
+            home_team_id, away_team_id, game_date, notes = st.session_state.pending_teams
+            game_data = st.session_state.mlb_client.get_game_data(
+                home_team_id, away_team_id, game_date, game_selection=selected_game
+            )
+            if game_data:
+                st.session_state.selected_game_data = game_data
+                st.session_state.pending_notes = notes
+                # Clear game options
+                delattr(st.session_state, 'game_options')
+                delattr(st.session_state, 'pending_teams')
+                st.rerun()
+
+    # Display game data if available
+    if hasattr(st.session_state, 'selected_game_data') and st.session_state.selected_game_data:
+        game_data = st.session_state.selected_game_data
+        notes = getattr(st.session_state, 'pending_notes', '')
+        
+        # Show game preview before saving
+        with st.expander("🎯 Game Preview", expanded=True):
+            col_preview1, col_preview2 = st.columns(2)
+            with col_preview1:
+                st.write(f"**Date:** {game_data.get('date')}")
+                st.write(f"**Venue:** {game_data.get('venue', 'N/A')}")
+                st.write(f"**Status:** {game_data.get('game_status', 'N/A')}")
+                if game_data.get('is_doubleheader'):
+                    st.write(f"**Game:** {game_data.get('game_number', 1)} of {game_data.get('total_games_found', 2)}")
+            with col_preview2:
+                st.write(f"**Final Score:**")
+                st.write(f"{game_data.get('away_team')} **{game_data.get('away_score')}** @ {game_data.get('home_team')} **{game_data.get('home_score')}**")
+                
+                # Show some basic stats
+                total_batters = len(game_data.get('home_team_batting', [])) + len(game_data.get('away_team_batting', []))
+                total_pitchers = len(game_data.get('home_team_pitching', [])) + len(game_data.get('away_team_pitching', []))
+                st.write(f"**Players:** {total_batters} batters, {total_pitchers} pitchers")
+        
+        # Confirm save
+        if st.button("💾 Confirm & Save Game", type="secondary"):
+            with st.spinner("Saving game data..."):
+                success = st.session_state.data_manager.add_game(game_data, notes)
+                
+            if success:
+                st.success("🎉 Game added successfully!")
+                st.balloons()
+                # Clear the cached game data
+                if hasattr(st.session_state, 'selected_game_data'):
+                    delattr(st.session_state, 'selected_game_data')
+                if hasattr(st.session_state, 'pending_notes'):
+                    delattr(st.session_state, 'pending_notes')
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("❌ Failed to save game data. Please try again.")
 
 def my_games_page():
     st.header("My Attended Games")
@@ -201,7 +324,7 @@ def my_games_page():
         selected_game_idx = st.selectbox(
             "Select a game to view details",
             range(len(games)),
-            format_func=lambda x: f"{games[x].get('date')} - {games[x].get('away_team')} @ {games[x].get('home_team')}"
+            format_func=lambda x: format_game_display_name(games[x])
         )
         if selected_game_idx is not None:
             game = games[selected_game_idx]
@@ -211,6 +334,16 @@ def my_games_page():
                 st.write(f"**Date:** {game.get('date')}")
                 st.write(f"**Teams:** {game.get('away_team')} @ {game.get('home_team')}")
                 st.write(f"**Final Score:** {game.get('away_score')} - {game.get('home_score')}")
+                
+                # Show doubleheader information
+                if game.get('is_doubleheader'):
+                    st.write(f"**Doubleheader:** Game {game.get('game_number', 'N/A')} of {game.get('total_games_found', 2)}")
+                elif game.get('game_number'):
+                    st.write(f"**Game Number:** {game.get('game_number')}")
+                
+                if game.get('venue'):
+                    st.write(f"**Venue:** {game.get('venue')}")
+                
                 if game.get('notes'):
                     st.write(f"**Notes:** {game.get('notes')}")
                 # Display box score data
@@ -664,123 +797,343 @@ def player_stats_page():
             st.info("No pitching statistics available.")
 
 def dashboard_page():
-    st.header("Statistics Dashboard")
+    st.header("📊 Baseball Statistics Dashboard")
     
     games = st.session_state.data_manager.get_all_games()
     
     if not games:
-        st.info("No games added yet. Add some games to see visualizations.")
+        st.info("🎯 No games added yet. Add some games to see visualizations and insights!")
         return
     
     # Calculate stats for visualization
     batting_stats, pitching_stats = st.session_state.stats_calculator.calculate_aggregate_stats(games)
     
-
-    # Games summary table (by month)
-    st.subheader("Games Attended by Month")
-    games_by_month = {}
-    for g in games:
-        d = g.get('date', 'Unknown')
-        try:
-            dt = datetime.strptime(d, '%Y-%m-%d')
-            month_str = dt.strftime('%Y-%m')
-        except Exception:
-            month_str = 'Unknown'
-        games_by_month[month_str] = games_by_month.get(month_str, 0) + 1
-    games_by_month_list = [{"Month": k, "Games Attended": v} for k, v in sorted(games_by_month.items())]
-    st.table(games_by_month_list)
-
-    # Top teams by games attended (table)
-    st.subheader("Top Teams by Games Attended")
-    team_counts = {}
-    for g in games:
-        home = g.get('home_team')
-        away = g.get('away_team')
-        for t in (home, away):
-            if t:
-                team_counts[t] = team_counts.get(t, 0) + 1
-    teams_list = [{"Team": t, "Games Attended": c} for t, c in sorted(team_counts.items(), key=lambda x: -x[1])]
-    st.table(teams_list[:20])
-
-    # Aggregated Team-by-Team Record
-    st.subheader("Aggregated Team-by-Team Record")
-    records = {}
-    for g in games:
-        home = g.get('home_team')
-        away = g.get('away_team')
-        hs = g.get('home_score')
-        ascore = g.get('away_score')
-        # skip if scores missing
-        if home is None or away is None or hs is None or ascore is None:
-            continue
-        # initialize
-        for t in (home, away):
-            if t not in records:
-                records[t] = {"Games":0, "Wins":0, "Losses":0, "Ties":0, "Runs For":0, "Runs Against":0}
-        # update games and runs
-        records[home]["Games"] += 1
-        records[away]["Games"] += 1
-        records[home]["Runs For"] += int(hs)
-        records[home]["Runs Against"] += int(ascore)
-        records[away]["Runs For"] += int(ascore)
-        records[away]["Runs Against"] += int(hs)
-        # determine result
-        if int(hs) > int(ascore):
-            records[home]["Wins"] += 1
-            records[away]["Losses"] += 1
-        elif int(hs) < int(ascore):
-            records[away]["Wins"] += 1
-            records[home]["Losses"] += 1
+    # Top-level metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("🎯 Total Games Attended", len(games))
+    
+    with col2:
+        total_players = len(batting_stats) if batting_stats else 0
+        st.metric("⚾ Players Watched", total_players)
+    
+    with col3:
+        total_runs = sum(int(g.get('home_score', 0)) + int(g.get('away_score', 0)) for g in games)
+        avg_runs = total_runs / len(games) if games else 0
+        st.metric("🏃‍♂️ Avg Runs per Game", f"{avg_runs:.1f}")
+    
+    with col4:
+        dates = [g.get('date') for g in games if g.get('date')]
+        if dates:
+            latest_date = max(dates)
+            st.metric("📅 Latest Game", latest_date)
+    
+    st.markdown("---")
+    
+    # Interactive filters
+    st.subheader("🎛️ Filter Your Data")
+    col_filter1, col_filter2 = st.columns(2)
+    
+    with col_filter1:
+        # Team filter
+        all_teams = set()
+        for g in games:
+            if g.get('home_team'):
+                all_teams.add(g.get('home_team'))
+            if g.get('away_team'):
+                all_teams.add(g.get('away_team'))
+        
+        selected_teams = st.multiselect(
+            "Filter by Teams:",
+            sorted(all_teams),
+            default=[],
+            help="Leave empty to show all teams"
+        )
+    
+    with col_filter2:
+        # Date range filter
+        game_dates = [datetime.strptime(g.get('date'), '%Y-%m-%d').date() for g in games if g.get('date')]
+        if game_dates:
+            min_date, max_date = min(game_dates), max(game_dates)
+            date_range = st.date_input(
+                "Date Range:",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                help="Filter games by date range"
+            )
         else:
-            records[home]["Ties"] += 1
-            records[away]["Ties"] += 1
-
-    # convert to list and compute win%
-    records_list = []
-    for t, r in records.items():
-        win_pct = (r["Wins"] / r["Games"]) if r["Games"] > 0 else 0
-        records_list.append({
-            "Team": t,
-            "Games": r["Games"],
-            "Wins": r["Wins"],
-            "Losses": r["Losses"],
-            "Ties": r["Ties"],
-            "Runs For": r["Runs For"],
-            "Runs Against": r["Runs Against"],
-            "Win%": f"{win_pct:.3f}"
-        })
-    # show sorted by Win%
-    records_list_sorted = sorted(records_list, key=lambda x: (-float(x["Win%"]), -x["Games"]))
-    st.dataframe(records_list_sorted, use_container_width=True)
-
-    # Replace player performance charts with tables of top performances (fall back to existing stats)
-    # Player performance charts
-    if batting_stats:
-        st.subheader("Top Batting Performances")
+            date_range = None
+    
+    # Apply filters
+    filtered_games = games
+    if selected_teams:
+        filtered_games = [g for g in filtered_games 
+                         if g.get('home_team') in selected_teams or g.get('away_team') in selected_teams]
+    
+    if date_range and len(date_range) == 2:
+        start_date, end_date = date_range
+        filtered_games = [g for g in filtered_games 
+                         if start_date <= datetime.strptime(g.get('date'), '%Y-%m-%d').date() <= end_date]
+    
+    st.markdown("---")
+    
+    # Visualizations with filtered data
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 Overview", "🏟️ Teams", "📊 Performance", "🎯 Insights"])
+    
+    with tab1:
+        col1, col2 = st.columns(2)
         
-        batting_df = pd.DataFrame(batting_stats)
+        with col1:
+            # Games by month chart
+            st.subheader("📅 Games by Month")
+            games_by_month = {}
+            for g in filtered_games:
+                d = g.get('date', 'Unknown')
+                try:
+                    dt = datetime.strptime(d, '%Y-%m-%d')
+                    month_str = dt.strftime('%Y-%m')
+                except Exception:
+                    month_str = 'Unknown'
+                games_by_month[month_str] = games_by_month.get(month_str, 0) + 1
+            
+            if games_by_month:
+                months_df = pd.DataFrame([
+                    {"Month": k, "Games": v} 
+                    for k, v in sorted(games_by_month.items())
+                ])
+                fig_months = px.bar(months_df, x='Month', y='Games', 
+                                   title="Games Attended Over Time",
+                                   color='Games', 
+                                   color_continuous_scale='blues')
+                fig_months.update_layout(height=400)
+                st.plotly_chart(fig_months, use_container_width=True)
         
-        if len(batting_df) > 0 and 'games' in batting_df.columns:
-            # Filter for players with at least 3 games
-            eligible_players = batting_df[batting_df['games'] >= 3]
-            if len(eligible_players) > 0:
-                col1, col2 = st.columns(2)
+        with col2:
+            # Score distribution
+            st.subheader("⚾ Score Distribution")
+            home_scores = [int(g.get('home_score', 0)) for g in filtered_games]
+            away_scores = [int(g.get('away_score', 0)) for g in filtered_games]
+            
+            scores_df = pd.DataFrame({
+                'Score': home_scores + away_scores,
+                'Type': ['Home'] * len(home_scores) + ['Away'] * len(away_scores)
+            })
+            
+            fig_scores = px.histogram(scores_df, x='Score', color='Type', 
+                                     title="Score Distribution",
+                                     barmode='overlay',
+                                     opacity=0.7)
+            fig_scores.update_layout(height=400)
+            st.plotly_chart(fig_scores, use_container_width=True)
+    
+    with tab2:
+        # Team analysis
+        st.subheader("🏟️ Team Performance Analysis")
+        
+        # Team records calculation
+        records = {}
+        for g in filtered_games:
+            home = g.get('home_team')
+            away = g.get('away_team')
+            hs = g.get('home_score')
+            ascore = g.get('away_score')
+            
+            if home is None or away is None or hs is None or ascore is None:
+                continue
                 
-                with col1:
-                    if 'batting_average' in eligible_players.columns:
-                        top_avg = eligible_players.nlargest(10, 'batting_average')
-                        fig_avg = px.bar(top_avg, x='batting_average', y='player_name',
-                                        orientation='h', title='Top 10 Batting Averages (Min 3 Games)')
-                        st.plotly_chart(fig_avg, use_container_width=True)
-                
-                with col2:
-                    if 'home_runs' in eligible_players.columns:
-                        top_hr = eligible_players.nlargest(10, 'home_runs')
-                        fig_hr = px.bar(top_hr, x='home_runs', y='player_name',
-                                       orientation='h', title='Top 10 Home Run Totals (Min 3 Games)')
-                        st.plotly_chart(fig_hr, use_container_width=True)
+            for t in (home, away):
+                if t not in records:
+                    records[t] = {"Games":0, "Wins":0, "Losses":0, "Ties":0, 
+                                "Runs_For":0, "Runs_Against":0}
+            
+            records[home]["Games"] += 1
+            records[away]["Games"] += 1
+            records[home]["Runs_For"] += int(hs)
+            records[home]["Runs_Against"] += int(ascore)
+            records[away]["Runs_For"] += int(ascore)
+            records[away]["Runs_Against"] += int(hs)
+            
+            if int(hs) > int(ascore):
+                records[home]["Wins"] += 1
+                records[away]["Losses"] += 1
+            elif int(hs) < int(ascore):
+                records[away]["Wins"] += 1
+                records[home]["Losses"] += 1
             else:
-                st.info("No players with at least 3 games for batting average leaderboard.")
+                records[home]["Ties"] += 1
+                records[away]["Ties"] += 1
+        
+        if records:
+            records_list = []
+            for team, stats in records.items():
+                win_pct = (stats["Wins"] / stats["Games"]) if stats["Games"] > 0 else 0
+                records_list.append({
+                    "Team": team,
+                    "Games": stats["Games"],
+                    "Wins": stats["Wins"],
+                    "Losses": stats["Losses"],
+                    "Win%": win_pct,
+                    "Runs_For": stats["Runs_For"],
+                    "Runs_Against": stats["Runs_Against"],
+                    "Run_Diff": stats["Runs_For"] - stats["Runs_Against"]
+                })
+            
+            records_df = pd.DataFrame(records_list)
+            records_df = records_df.sort_values('Win%', ascending=False)
+            
+            # Top performers chart
+            top_teams = records_df.head(10)
+            fig_teams = px.bar(top_teams, x='Team', y='Win%', 
+                              title="Top 10 Teams by Win Percentage",
+                              color='Win%', 
+                              color_continuous_scale='RdYlGn')
+            fig_teams.update_xaxes(tickangle=45)
+            fig_teams.update_layout(height=500)
+            st.plotly_chart(fig_teams, use_container_width=True)
+            
+            # Detailed table
+            st.subheader("📋 Complete Team Records")
+            records_df['Win%'] = records_df['Win%'].apply(lambda x: f"{x:.3f}")
+            st.dataframe(records_df, use_container_width=True, hide_index=True)
+    
+    with tab3:
+        # Performance metrics
+        st.subheader("🎯 Performance Insights")
+        
+        if batting_stats and len(batting_stats) > 0:
+            batting_df = pd.DataFrame(batting_stats)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Top batting averages
+                if 'batting_average' in batting_df.columns and 'games' in batting_df.columns:
+                    qualified_batters = batting_df[batting_df['games'] >= 3]
+                    if len(qualified_batters) > 0:
+                        top_avg = qualified_batters.nlargest(10, 'batting_average')
+                        fig_avg = px.bar(top_avg.head(8), 
+                                       x='batting_average', y='player_name',
+                                       orientation='h',
+                                       title='Top Batting Averages (Min 3 Games)',
+                                       color='batting_average',
+                                       color_continuous_scale='viridis')
+                        fig_avg.update_layout(height=400)
+                        st.plotly_chart(fig_avg, use_container_width=True)
+                    else:
+                        st.info("Need players with 3+ games for batting average leaderboard")
+            
+            with col2:
+                # Home runs leaders
+                if 'home_runs' in batting_df.columns:
+                    hr_leaders = batting_df[batting_df['home_runs'] > 0].nlargest(10, 'home_runs')
+                    if len(hr_leaders) > 0:
+                        fig_hr = px.bar(hr_leaders.head(8), 
+                                      x='home_runs', y='player_name',
+                                      orientation='h',
+                                      title='Home Run Leaders',
+                                      color='home_runs',
+                                      color_continuous_scale='Reds')
+                        fig_hr.update_layout(height=400)
+                        st.plotly_chart(fig_hr, use_container_width=True)
+                    else:
+                        st.info("No home runs recorded yet!")
+        else:
+            st.info("No player statistics available yet. Add some games to see player performance!")
+    
+    with tab4:
+        # Advanced insights
+        st.subheader("🎯 Advanced Insights")
+        
+        # Game outcome analysis
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🏆 Game Outcomes")
+            outcomes = {'Home Wins': 0, 'Away Wins': 0, 'Ties': 0}
+            
+            for g in filtered_games:
+                hs = int(g.get('home_score', 0))
+                ascore = int(g.get('away_score', 0))
+                
+                if hs > ascore:
+                    outcomes['Home Wins'] += 1
+                elif ascore > hs:
+                    outcomes['Away Wins'] += 1
+                else:
+                    outcomes['Ties'] += 1
+            
+            outcomes_df = pd.DataFrame([
+                {"Outcome": k, "Count": v} for k, v in outcomes.items()
+            ])
+            
+            fig_outcomes = px.pie(outcomes_df, values='Count', names='Outcome',
+                                title="Home vs Away Win Distribution",
+                                color_discrete_sequence=['#ff6b6b', '#4ecdc4', '#45b7d1'])
+            st.plotly_chart(fig_outcomes, use_container_width=True)
+        
+        with col2:
+            # Scoring trends
+            st.subheader("📈 Scoring Trends")
+            if filtered_games:
+                game_dates = []
+                total_runs = []
+                
+                for g in sorted(filtered_games, key=lambda x: x.get('date', '')):
+                    try:
+                        date = datetime.strptime(g.get('date'), '%Y-%m-%d')
+                        runs = int(g.get('home_score', 0)) + int(g.get('away_score', 0))
+                        game_dates.append(date)
+                        total_runs.append(runs)
+                    except:
+                        continue
+                
+                if game_dates:
+                    trends_df = pd.DataFrame({
+                        'Date': game_dates,
+                        'Total_Runs': total_runs
+                    })
+                    
+                    fig_trends = px.line(trends_df, x='Date', y='Total_Runs',
+                                       title="Total Runs per Game Over Time",
+                                       markers=True)
+                    fig_trends.add_hline(y=sum(total_runs)/len(total_runs), 
+                                       line_dash="dash", 
+                                       annotation_text=f"Average: {sum(total_runs)/len(total_runs):.1f}")
+                    st.plotly_chart(fig_trends, use_container_width=True)
+        
+        # Summary insights
+        st.markdown("### 💡 Key Insights")
+        
+        insights = []
+        if filtered_games:
+            avg_score = sum(int(g.get('home_score', 0)) + int(g.get('away_score', 0)) 
+                           for g in filtered_games) / len(filtered_games)
+            insights.append(f"📊 Average total runs per game: **{avg_score:.1f}**")
+            
+            home_win_pct = outcomes.get('Home Wins', 0) / len(filtered_games) * 100
+            insights.append(f"🏠 Home team wins **{home_win_pct:.1f}%** of games you've attended")
+            
+            if batting_stats:
+                total_players = len(batting_stats)
+                insights.append(f"👥 You've watched **{total_players}** different players across all games")
+            
+            most_common_teams = {}
+            for g in filtered_games:
+                for team in [g.get('home_team'), g.get('away_team')]:
+                    if team:
+                        most_common_teams[team] = most_common_teams.get(team, 0) + 1
+            
+            if most_common_teams:
+                fav_team = max(most_common_teams.items(), key=lambda x: x[1])
+                insights.append(f"⭐ Most watched team: **{fav_team[0]}** ({fav_team[1]} games)")
+        
+        for insight in insights:
+            st.markdown(f"- {insight}")
+        
+        if not insights:
+            st.info("Add more games to see personalized insights!")
 
 def export_data_page():
     st.header("Export Player Statistics")
