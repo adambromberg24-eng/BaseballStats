@@ -320,12 +320,31 @@ def my_games_page():
             if st.button("🗑️ Remove Game", key=f"remove_game_{idx}"):
                 # Remove game using its unique properties instead of index
                 try:
-                    success = st.session_state.data_manager.remove_game_by_properties(
-                        game.get('date'), 
-                        game.get('home_team_id'), 
-                        game.get('away_team_id'),
-                        game.get('game_number')
-                    )
+                    # Check if the new method exists, fallback to old method if not
+                    if hasattr(st.session_state.data_manager, 'remove_game_by_properties'):
+                        success = st.session_state.data_manager.remove_game_by_properties(
+                            game.get('date'), 
+                            game.get('home_team_id'), 
+                            game.get('away_team_id'),
+                            game.get('game_number')
+                        )
+                    else:
+                        # Fallback: find the original index in the unsorted list
+                        all_games = st.session_state.data_manager.get_all_games()
+                        original_idx = None
+                        for orig_idx, orig_game in enumerate(all_games):
+                            if (orig_game.get('date') == game.get('date') and
+                                str(orig_game.get('home_team_id')) == str(game.get('home_team_id')) and
+                                str(orig_game.get('away_team_id')) == str(game.get('away_team_id')) and
+                                str(orig_game.get('game_number')) == str(game.get('game_number'))):
+                                original_idx = orig_idx
+                                break
+                        
+                        if original_idx is not None:
+                            success = st.session_state.data_manager.remove_game(original_idx)
+                        else:
+                            success = False
+                    
                     if success:
                         st.success("Game removed successfully!")
                         st.rerun()

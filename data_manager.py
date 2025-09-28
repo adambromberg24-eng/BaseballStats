@@ -131,7 +131,7 @@ class DataManager:
             return False
 
     def remove_game_by_properties(self, date: str, home_team_id: int, away_team_id: int, game_number: int = None) -> bool:
-        """Remove a game by its unique properties"""
+        """Remove a game by its unique properties - Updated for deployment sync"""
         try:
             # Convert team IDs to integers to handle string inputs
             try:
