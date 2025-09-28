@@ -4,8 +4,9 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 class DataManager:
-    def __init__(self, data_file: str = "baseball_data.json"):
-        self.data_file = data_file
+    def __init__(self, data_file: str = "baseball_data.json", user_id: str = None):
+        self.user_id = user_id
+        self.data_file = f"baseball_data_{user_id}.json" if user_id else data_file
         self.data = self._load_data()
     
     def _load_data(self) -> Dict[str, Any]:

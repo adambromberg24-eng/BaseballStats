@@ -50,12 +50,28 @@ class MLBApiClient:
             # Get schedule for the date
             schedule = statsapi.schedule(date=date_str)
             
+            # Find all matching games (handles doubleheaders)
+            matching_games = [
+                game for game in schedule
+                if game.get('home_id') == home_team_id and game.get('away_id') == away_team_id
+            ]
+            
+            if len(matching_games) > 1:
+                # Multiple games found (doubleheader)
+                print(f"Found {len(matching_games)} games for this matchup (doubleheader)")
+                for game in matching_games:
+                    print(f"Game {game.get('game_num')}: Status={game.get('status')}, Score={game.get('home_score')}-{game.get('away_score')}")
+            
             target_game = None
-            for game in schedule:
-                if (game.get('home_id') == home_team_id and 
-                    game.get('away_id') == away_team_id):
+            for game in matching_games:
+                # For completed games, ensure we have a final score
+                if game.get('status') == 'Final' and (game.get('home_score', 0) > 0 or game.get('away_score', 0) > 0):
                     target_game = game
                     break
+            
+            # If no completed game found, take the first matching game
+            if not target_game and matching_games:
+                target_game = matching_games[0]
             
             if not target_game:
                 return None
@@ -68,9 +84,24 @@ class MLBApiClient:
             box_score = statsapi.boxscore_data(game_id)
             
             # Extract game information
+            # Get actual game date and time
+            game_datetime = target_game.get('game_datetime')
+            actual_date = None
+            if game_datetime:
+                try:
+                    dt = datetime.strptime(game_datetime, "%Y-%m-%dT%H:%M:%SZ")
+                    actual_date = dt.strftime("%Y-%m-%d")
+                except:
+                    pass
+
+            # Check if this is part of a doubleheader
+            is_doubleheader = len([g for g in schedule if g.get('home_id') == home_team_id 
+                                 and g.get('away_id') == away_team_id]) > 1
+            
             game_data = {
                 'game_id': game_id,
                 'date': date_str,
+                'actual_date': actual_date or date_str,  # Use actual game date if available
                 'home_team': target_game.get('home_name', ''),
                 'away_team': target_game.get('away_name', ''),
                 'home_team_id': home_team_id,
@@ -79,6 +110,8 @@ class MLBApiClient:
                 'away_score': target_game.get('away_score', 0),
                 'game_status': target_game.get('status', ''),
                 'venue': target_game.get('venue_name', ''),
+                'is_doubleheader': is_doubleheader,
+                'game_number': target_game.get('game_num', 1) if is_doubleheader else None,
                 'home_team_batting': [],
                 'away_team_batting': [],
                 'home_team_pitching': [],
@@ -136,9 +169,24 @@ class MLBApiClient:
                 except (ValueError, TypeError):
                     return 0
             
+            # Get batting order and position
+            batting_order = player_stats.get('battingOrder', '')
+            position = player_stats.get('position', '')  # Position is a direct string in this API response
+            substitution = bool(player_stats.get('substitution', False))
+            
+            # Convert batting order to number (1-9) for starters
+            try:
+                # MLB API uses string like '100' for 1st, '200' for 2nd, etc.
+                order_num = int(batting_order[0]) if batting_order and not substitution else None
+            except (ValueError, IndexError):
+                order_num = None
+                
             return {
+                'order': order_num,
                 'player_id': player_id,
                 'name': player_name,
+                'position': position,
+                'sub': substitution,
                 'at_bats': safe_int(player_stats.get('ab', 0)),
                 'hits': safe_int(player_stats.get('h', 0)),
                 'runs': safe_int(player_stats.get('r', 0)),

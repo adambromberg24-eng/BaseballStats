@@ -1,0 +1,23 @@
+cookie:
+  expiry_days: 30
+  key: random_key_for_demo
+  name: baseball_auth
+credentials:
+  usernames:
+    Ethanshulman15:
+      email: Ethanshulman15@gmail.com
+      name: Ethan shulman
+      password: $2b$12$iEJOfRWz.pwGrSIrQp9kwOrAQjiIdiIsSCswgRHFJaag5/QlW0kKC
+    adambromberg:
+      email: adambromberg24@gmail.com
+      name: Adam Bromberg
+      password: $2b$12$FMWgYf8cM5O/LopLnJvvXeBE4yPB/Bm0QNl4eVRaENpu2ss0gCe/W
+    admin:
+      email: admin@baseballstats.com
+      name: Admin User
+      password: $2b$12$h15sMKZQjzSwsl/E6QI7Uu6t3egLsjWUlRqXqsS7NmQd1L9JeoWyK
+preauthorized:
+  emails:
+  - admin@baseballstats.com
+  - adambromberg24@gmail.com
+  - Ethanshulman15@gmail.com
