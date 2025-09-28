@@ -129,6 +129,21 @@ class DataManager:
         except Exception as e:
             print(f"Error removing game: {e}")
             return False
+
+    def remove_game_by_properties(self, date: str, home_team_id: int, away_team_id: int, game_number: int = None) -> bool:
+        """Remove a game by its unique properties"""
+        try:
+            for i, game in enumerate(self.data["games"]):
+                if (game.get('date') == date and 
+                    game.get('home_team_id') == home_team_id and 
+                    game.get('away_team_id') == away_team_id and
+                    game.get('game_number') == game_number):
+                    self.data["games"].pop(i)
+                    return self._save_data()
+            return False
+        except Exception as e:
+            print(f"Error removing game by properties: {e}")
+            return False
     
     def get_game_by_date_and_teams(self, date: str, home_team: str, away_team: str) -> Optional[Dict[str, Any]]:
         """Get a specific game by date and teams"""

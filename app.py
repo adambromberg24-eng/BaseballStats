@@ -283,6 +283,9 @@ def my_games_page():
         st.info("No games added yet. Go to 'Add Game' to start tracking your attended games.")
         return
 
+    # Sort games in reverse chronological order (most recent first)
+    games.sort(key=lambda x: x.get('date', ''), reverse=True)
+
     # Detect Streamlit theme (dark/light)
     theme = st.get_option("theme.base")
     is_dark = theme == "dark"
@@ -315,7 +318,14 @@ def my_games_page():
             # Working remove button below the card
             remove_btn_label = f"Remove Game {idx+1} ({away_team} @ {home_team})"
             if st.button("🗑️ Remove Game", key=f"remove_game_{idx}"):
-                if st.session_state.data_manager.remove_game(idx):
+                # Remove game using its unique properties instead of index
+                success = st.session_state.data_manager.remove_game_by_properties(
+                    game.get('date'), 
+                    game.get('home_team_id'), 
+                    game.get('away_team_id'),
+                    game.get('game_number')
+                )
+                if success:
                     st.success("Game removed successfully!")
                     st.rerun()
 
