@@ -24,19 +24,26 @@ class DataManager:
     def _save_data(self) -> bool:
         """Save data to JSON file"""
         try:
+            print(f"DEBUG: Attempting to save to file: {self.data_file}")
             self.data["updated_at"] = datetime.now().isoformat()
             with open(self.data_file, 'w', encoding='utf-8') as f:
                 json.dump(self.data, f, indent=2, default=str)
+            print(f"DEBUG: Successfully saved {len(self.data.get('games', []))} games")
             return True
         except Exception as e:
-            print(f"Error saving data: {e}")
+            print(f"DEBUG: Error saving data: {e}")
             return False
     
     def add_game(self, game_data: Dict[str, Any], notes: str = "") -> bool:
         """Add a new game to the database with validation"""
         try:
+            # Debug: Print game data being validated
+            print(f"DEBUG: Attempting to add game data: {game_data}")
+            
             # Validate game data
-            if not self._validate_game_data(game_data):
+            validation_result, validation_error = self._validate_game_data_with_debug(game_data)
+            if not validation_result:
+                print(f"DEBUG: Validation failed: {validation_error}")
                 return False
                 
             # Check if game already exists - modified for doubleheader support
@@ -64,6 +71,8 @@ class DataManager:
             if is_doubleheader and game_number:
                 game_id += f"_game{game_number}"
             
+            print(f"DEBUG: Generated game_id: {game_id}")
+            
             for existing_game in self.data["games"]:
                 existing_base_id = f"{existing_game.get('date')}_{existing_game.get('home_team_id')}_{existing_game.get('away_team_id')}"
                 
@@ -77,6 +86,7 @@ class DataManager:
                 
                 # Exact match - this is a duplicate
                 if existing_id == game_id:
+                    print(f"DEBUG: Duplicate game detected. Existing ID: {existing_id}, New ID: {game_id}")
                     return False
                 
                 # Special case: if we're adding a doubleheader game and there's an existing game 
@@ -95,9 +105,12 @@ class DataManager:
             game_data["added_at"] = datetime.now().isoformat()
             game_data["version"] = "1.0"
             
+            print(f"DEBUG: Adding game to data structure. Final game data: {game_data}")
             self.data["games"].append(game_data)
             
-            return self._save_data()
+            save_result = self._save_data()
+            print(f"DEBUG: Save result: {save_result}")
+            return save_result
         except Exception as e:
             print(f"Error adding game: {e}")
             return False
@@ -152,6 +165,49 @@ class DataManager:
             print(f"Error clearing data: {e}")
             return False
     
+    def _validate_game_data_with_debug(self, game_data: Dict[str, Any]) -> tuple[bool, str]:
+        """Validate game data structure and required fields with debug info"""
+        required_fields = ['date', 'home_team', 'away_team', 'home_team_id', 'away_team_id']
+        
+        # Check required fields
+        for field in required_fields:
+            if field not in game_data:
+                return False, f"Missing required field: {field}"
+            if not game_data[field] and game_data[field] != 0:  # Allow 0 values
+                return False, f"Empty required field: {field} (value: {game_data[field]})"
+        
+        # Validate date format
+        try:
+            datetime.strptime(game_data['date'], '%Y-%m-%d')
+        except ValueError as e:
+            return False, f"Invalid date format: {game_data['date']} - {e}"
+        
+        # Validate team IDs are integers
+        try:
+            int(game_data['home_team_id'])
+        except (ValueError, TypeError) as e:
+            return False, f"Invalid home_team_id: {game_data['home_team_id']} - {e}"
+            
+        try:
+            int(game_data['away_team_id'])
+        except (ValueError, TypeError) as e:
+            return False, f"Invalid away_team_id: {game_data['away_team_id']} - {e}"
+        
+        # Validate scores if present
+        if 'home_score' in game_data and game_data['home_score'] is not None:
+            try:
+                int(game_data['home_score'])
+            except (ValueError, TypeError) as e:
+                return False, f"Invalid home_score: {game_data['home_score']} - {e}"
+                
+        if 'away_score' in game_data and game_data['away_score'] is not None:
+            try:
+                int(game_data['away_score'])
+            except (ValueError, TypeError) as e:
+                return False, f"Invalid away_score: {game_data['away_score']} - {e}"
+        
+        return True, "Validation successful"
+
     def _validate_game_data(self, game_data: Dict[str, Any]) -> bool:
         """Validate game data structure and required fields"""
         required_fields = ['date', 'home_team', 'away_team', 'home_team_id', 'away_team_id']
@@ -188,3 +244,16 @@ class DataManager:
                 return False
         
         return True
+    
+    def _sanitize_notes(self, notes: str) -> str:
+        """Sanitize notes input by limiting length and removing problematic characters"""
+        if not notes:
+            return ""
+        
+        # Limit length
+        notes = str(notes)[:1000]
+        
+        # Remove or replace problematic characters if needed
+        notes = notes.strip()
+        
+        return notes
