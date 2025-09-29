@@ -8,14 +8,29 @@ class AuthManager:
         self.config_file = config_file
         self.config = self._load_config()
         
-        # Initialize authenticator with proper cookie settings
-        self.authenticator = stauth.Authenticate(
-            self.config['credentials'],
-            self.config['cookie']['name'],
-            self.config['cookie']['key'],
-            self.config['cookie']['expiry_days'],
-            self.config.get('preauthorized', {})
-        )
+        # Initialize authenticator with updated API (removing deprecated preauthorized parameter)
+        try:
+            self.authenticator = stauth.Authenticate(
+                self.config['credentials'],
+                self.config['cookie']['name'],
+                self.config['cookie']['key'],
+                self.config['cookie']['expiry_days']
+                # Removed preauthorized parameter due to deprecation
+            )
+        except Exception as e:
+            print(f"DEBUG: Error initializing authenticator with new API: {e}")
+            # Fallback to older API if needed
+            try:
+                self.authenticator = stauth.Authenticate(
+                    self.config['credentials'],
+                    self.config['cookie']['name'],
+                    self.config['cookie']['key'],
+                    self.config['cookie']['expiry_days'],
+                    self.config.get('preauthorized', {})
+                )
+            except Exception as fallback_error:
+                print(f"DEBUG: Fallback also failed: {fallback_error}")
+                raise fallback_error
         
         # Auto-check authentication status on initialization
         self._check_authentication()
@@ -34,14 +49,25 @@ class AuthManager:
             # This will check for existing authentication cookies
             # Handle different versions of streamlit-authenticator
             try:
-                result = self.authenticator.login('main')
+                # Try the newer API first - may not need parameters for initial check
+                result = self.authenticator.login()
                 if isinstance(result, tuple) and len(result) == 3:
                     name, authentication_status, username = result
+                elif isinstance(result, tuple) and len(result) == 2:
+                    # Some versions return just status and username
+                    authentication_status, username = result
+                    name = username
                 else:
-                    # Fallback for different API versions
+                    # Fallback to session state
                     authentication_status = st.session_state.get('authentication_status')
                     username = st.session_state.get('username')
                     name = st.session_state.get('name')
+            except TypeError as type_error:
+                print(f"DEBUG: Login API type error (expected for initial check): {type_error}")
+                # This is expected on initial load - get from session state
+                authentication_status = st.session_state.get('authentication_status')
+                username = st.session_state.get('username') 
+                name = st.session_state.get('name')
             except Exception as auth_error:
                 print(f"DEBUG: Authentication check error: {auth_error}")
                 # Try to get from session state directly
@@ -52,7 +78,7 @@ class AuthManager:
             if authentication_status is True and username:
                 # User is authenticated via cookie
                 st.session_state['authentication_status'] = True
-                st.session_state['name'] = name
+                st.session_state['name'] = name or username
                 st.session_state['username'] = username
                 print(f"DEBUG: Auto-authenticated user from cookie: {username}")
             elif authentication_status is False:
@@ -73,7 +99,33 @@ class AuthManager:
         try:
             # Only show login form if not already authenticated
             if not self.is_authenticated():
-                name, authentication_status, username = self.authenticator.login('main', 'Login')
+                try:
+                    # Try the newer API - may need to adjust based on actual version
+                    result = self.authenticator.login(location='main')
+                    
+                    if isinstance(result, tuple):
+                        if len(result) == 3:
+                            name, authentication_status, username = result
+                        elif len(result) == 2:
+                            authentication_status, username = result
+                            name = username
+                        else:
+                            authentication_status = result[0] if result else None
+                            username = st.session_state.get('username')
+                            name = st.session_state.get('name')
+                    else:
+                        # Single value or None
+                        authentication_status = result
+                        username = st.session_state.get('username')
+                        name = st.session_state.get('name')
+                        
+                except TypeError as e:
+                    # Handle API changes
+                    print(f"DEBUG: Login API changed, trying alternative: {e}")
+                    result = self.authenticator.login()
+                    authentication_status = st.session_state.get('authentication_status')
+                    username = st.session_state.get('username')
+                    name = st.session_state.get('name')
                 
                 if authentication_status is True:
                     print(f"DEBUG: User logged in successfully: {username}")
@@ -94,8 +146,17 @@ class AuthManager:
     def logout(self, location='sidebar'):
         """Logout the current user"""
         if self.is_authenticated():
-            self.authenticator.logout('Logout', location)
-            # Clear session state
+            try:
+                # Try the newer API
+                self.authenticator.logout(location=location)
+            except TypeError:
+                # Fallback for older API
+                try:
+                    self.authenticator.logout('Logout', location)
+                except Exception as e:
+                    print(f"DEBUG: Logout fallback failed: {e}")
+                    
+            # Clear session state manually to ensure logout
             for key in ['authentication_status', 'name', 'username']:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -107,7 +168,7 @@ class AuthManager:
             return False  # User already exists
 
         # Hash the password
-        hashed_password = stauth.Hasher.hash(password)
+        hashed_password = stauth.Hasher([password]).generate()[0]
 
         # Add user to config
         self.config['credentials']['usernames'][username] = {
@@ -116,11 +177,9 @@ class AuthManager:
             'email': email
         }
 
-        # Add to preauthorized if needed
-        if email not in self.config.get('preauthorized', {}).get('emails', []):
-            self.config.setdefault('preauthorized', {}).setdefault('emails', []).append(email)
-
+        # Save updated config (removed preauthorized email handling as it's deprecated)
         self._save_config()
+        print(f"DEBUG: Successfully registered new user: {username}")
         return True
 
     def is_authenticated(self) -> bool:

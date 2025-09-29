@@ -16,8 +16,4 @@ credentials:
       email: admin@baseballstats.com
       name: Admin User
       password: $2b$12$h15sMKZQjzSwsl/E6QI7Uu6t3egLsjWUlRqXqsS7NmQd1L9JeoWyK
-preauthorized:
-  emails:
-  - admin@baseballstats.com
-  - adambromberg24@gmail.com
-  - Ethanshulman15@gmail.com
+# Removed deprecated preauthorized section
