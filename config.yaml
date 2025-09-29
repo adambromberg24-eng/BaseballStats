@@ -1,7 +1,7 @@
 cookie:
   expiry_days: 30
-  key: random_key_for_demo
-  name: baseball_auth
+  key: random_key_for_demo_persistent_v2  # Updated key for better security
+  name: baseball_auth_persistent
 credentials:
   usernames:
     Ethanshulman15:

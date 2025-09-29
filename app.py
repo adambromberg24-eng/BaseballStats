@@ -35,34 +35,47 @@ def main():
 
     auth_manager = AuthManager()
 
+    # Show authentication status
     if not auth_manager.is_authenticated():
-        st.title("Login to Baseball Statistics Aggregator")
+        st.title("🔐 Login to Baseball Statistics Aggregator")
+        
+        # Check if this is a fresh visit or failed login
+        auth_status = st.session_state.get('authentication_status', None)
+        if auth_status is False:
+            st.error("❌ Session expired or login failed. Please log in again.")
+        elif auth_status is None:
+            st.info("👋 Welcome! Please log in to access your baseball statistics.")
 
-        tab1, tab2 = st.tabs(["Login", "Register"])
+        tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
 
         with tab1:
-            auth_status, username = auth_manager.login()
-            if auth_status:
-                st.success(f"Logged in as {username}")
+            auth_result, username = auth_manager.login()
+            if auth_result is True:
+                st.success(f"✅ Welcome back, {auth_manager.get_user_display_name() or username}!")
+                st.balloons()
+                time.sleep(1)
                 st.rerun()
-            elif auth_status == False:
-                st.error("Invalid username or password")
+            elif auth_result is False:
+                st.error("❌ Invalid username or password. Please try again.")
 
         with tab2:
             with st.form("register_form"):
-                new_username = st.text_input("Username")
-                new_name = st.text_input("Full Name")
-                new_email = st.text_input("Email")
-                new_password = st.text_input("Password", type="password")
-                submitted = st.form_submit_button("Register")
-                if submitted:
+                new_username = st.text_input("Username", placeholder="Choose a unique username")
+                new_name = st.text_input("Full Name", placeholder="Your full name")
+                new_email = st.text_input("Email", placeholder="your.email@example.com")
+                new_password = st.text_input("Password", type="password", placeholder="Create a secure password")
+                submitted = st.form_submit_button("🚀 Create Account")
+                if submitted and new_username and new_name and new_email and new_password:
                     if auth_manager.register_user(new_username, new_name, new_password, new_email):
-                        st.success("Registration successful! Please login with your credentials.")
+                        st.success("🎉 Registration successful! Please log in with your new credentials.")
                     else:
-                        st.error("Username already exists or registration failed.")
+                        st.error("❌ Username already exists or registration failed. Please try a different username.")
+                elif submitted:
+                    st.warning("⚠️ Please fill in all fields.")
     else:
-        # Authenticated user
+        # Authenticated user - show persistent login status
         user = auth_manager.get_current_user()
+        user_display = auth_manager.get_user_display_name() or user
 
         # Initialize user-specific session state
         if 'data_manager' not in st.session_state or st.session_state.data_manager.user_id != user:
@@ -72,9 +85,26 @@ def main():
         if 'mlb_client' not in st.session_state:
             st.session_state.mlb_client = MLBApiClient()
 
-        # Sidebar with logout
-        st.sidebar.write(f"Logged in as: {user}")
-        auth_manager.logout()
+        # Sidebar with user info and logout
+        st.sidebar.markdown("### 👤 User Information")
+        st.sidebar.info(f"**Logged in as:** {user_display}")
+        st.sidebar.markdown("---")
+        
+        # Logout button in sidebar
+        if st.sidebar.button("🚪 Logout", type="secondary"):
+            auth_manager.logout()
+            st.success("👋 You have been logged out successfully!")
+            time.sleep(1)
+            st.rerun()
+
+        st.title("⚾ Baseball Statistics Aggregator")
+        st.markdown(f"**Welcome back, {user_display}!** 🎉 Track and analyze your MLB game attendance.")
+        
+        # Add a subtle indicator that they're logged in persistently
+        with st.sidebar.expander("🔐 Session Info", expanded=False):
+            st.write("✅ **Persistent Login Active**")  
+            st.write("You'll stay logged in even after refreshing the page!")
+            st.write("Session expires in 30 days unless you logout.")
 
         st.title("⚾ Baseball Statistics Aggregator")
         st.markdown("Track and analyze player statistics from MLB games you've attended")
