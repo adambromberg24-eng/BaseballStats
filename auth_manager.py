@@ -17,6 +17,7 @@ class AuthManager:
                 self.config['cookie']['expiry_days']
                 # Removed preauthorized parameter due to deprecation
             )
+            print("DEBUG: Authenticator initialized successfully")
         except Exception as e:
             print(f"DEBUG: Error initializing authenticator with new API: {e}")
             # Fallback to older API if needed
@@ -28,12 +29,13 @@ class AuthManager:
                     self.config['cookie']['expiry_days'],
                     self.config.get('preauthorized', {})
                 )
+                print("DEBUG: Authenticator initialized with fallback API")
             except Exception as fallback_error:
                 print(f"DEBUG: Fallback also failed: {fallback_error}")
                 raise fallback_error
         
-        # Auto-check authentication status on initialization
-        self._check_authentication()
+        # Don't auto-check authentication on initialization to avoid form display issues
+        # This will be called explicitly when needed
 
     def _load_config(self) -> dict:
         with open(self.config_file, 'r') as file:
@@ -46,49 +48,40 @@ class AuthManager:
     def _check_authentication(self):
         """Check for existing authentication cookies and restore session"""
         try:
-            # This will check for existing authentication cookies
-            # Handle different versions of streamlit-authenticator
-            try:
-                # Try the newer API first - may not need parameters for initial check
-                result = self.authenticator.login()
-                if isinstance(result, tuple) and len(result) == 3:
-                    name, authentication_status, username = result
-                elif isinstance(result, tuple) and len(result) == 2:
-                    # Some versions return just status and username
-                    authentication_status, username = result
-                    name = username
-                else:
-                    # Fallback to session state
-                    authentication_status = st.session_state.get('authentication_status')
-                    username = st.session_state.get('username')
-                    name = st.session_state.get('name')
-            except TypeError as type_error:
-                print(f"DEBUG: Login API type error (expected for initial check): {type_error}")
-                # This is expected on initial load - get from session state
-                authentication_status = st.session_state.get('authentication_status')
-                username = st.session_state.get('username') 
-                name = st.session_state.get('name')
-            except Exception as auth_error:
-                print(f"DEBUG: Authentication check error: {auth_error}")
-                # Try to get from session state directly
-                authentication_status = st.session_state.get('authentication_status')
-                username = st.session_state.get('username')
-                name = st.session_state.get('name')
+            # Skip if we already have a valid session
+            if st.session_state.get('authentication_status') is True and st.session_state.get('username'):
+                print(f"DEBUG: Already authenticated: {st.session_state.get('username')}")
+                return
+                
+            print("DEBUG: Checking for persistent authentication...")
             
-            if authentication_status is True and username:
-                # User is authenticated via cookie
-                st.session_state['authentication_status'] = True
-                st.session_state['name'] = name or username
-                st.session_state['username'] = username
-                print(f"DEBUG: Auto-authenticated user from cookie: {username}")
-            elif authentication_status is False:
-                # Failed authentication
-                st.session_state['authentication_status'] = False
-                print("DEBUG: Authentication failed or expired")
+            # Try to initialize authentication without triggering login form
+            # The authenticator should automatically check cookies on initialization
+            if hasattr(self.authenticator, 'authentication_status'):
+                auth_status = self.authenticator.authentication_status
+                username = getattr(self.authenticator, 'username', None) or st.session_state.get('username')
+                name = getattr(self.authenticator, 'name', None) or st.session_state.get('name')
+                
+                print(f"DEBUG: Authenticator status: {auth_status}, username: {username}")
+                
+                if auth_status is True and username:
+                    # User is authenticated via cookie
+                    st.session_state['authentication_status'] = True
+                    st.session_state['name'] = name or username
+                    st.session_state['username'] = username
+                    print(f"DEBUG: Auto-authenticated user from cookie: {username}")
+                    return
+            
+            # Fallback - check session state directly
+            auth_status = st.session_state.get('authentication_status')
+            username = st.session_state.get('username')
+            name = st.session_state.get('name')
+            
+            if auth_status is True and username:
+                print(f"DEBUG: Found existing session: {username}")
             else:
-                # No authentication attempt yet
+                print("DEBUG: No valid authentication found")
                 st.session_state['authentication_status'] = None
-                print("DEBUG: No authentication cookie found")
                 
         except Exception as e:
             print(f"DEBUG: Error checking authentication: {e}")
@@ -97,48 +90,49 @@ class AuthManager:
     def login(self) -> Tuple[bool, Optional[str]]:
         """Display login form and return (success, username)"""
         try:
-            # Only show login form if not already authenticated
-            if not self.is_authenticated():
-                try:
-                    # Try the newer API - may need to adjust based on actual version
-                    result = self.authenticator.login(location='main')
-                    
-                    if isinstance(result, tuple):
-                        if len(result) == 3:
-                            name, authentication_status, username = result
-                        elif len(result) == 2:
-                            authentication_status, username = result
-                            name = username
-                        else:
-                            authentication_status = result[0] if result else None
-                            username = st.session_state.get('username')
-                            name = st.session_state.get('name')
+            # If already authenticated, don't show login form
+            if self.is_authenticated():
+                return True, self.get_current_user()
+            
+            # Only show login form when explicitly called and user is not authenticated
+            try:
+                # Use the authenticator login method which handles the form display
+                result = self.authenticator.login(location='main')
+                
+                # Handle the result based on what the API returns
+                if isinstance(result, tuple):
+                    if len(result) == 3:
+                        name, authentication_status, username = result
+                    elif len(result) == 2:
+                        authentication_status, username = result
+                        name = username
                     else:
-                        # Single value or None
-                        authentication_status = result
+                        authentication_status = result[0] if result else None
                         username = st.session_state.get('username')
                         name = st.session_state.get('name')
-                        
-                except TypeError as e:
-                    # Handle API changes
-                    print(f"DEBUG: Login API changed, trying alternative: {e}")
-                    result = self.authenticator.login()
-                    authentication_status = st.session_state.get('authentication_status')
+                else:
+                    # Single value or None
+                    authentication_status = result
                     username = st.session_state.get('username')
                     name = st.session_state.get('name')
-                
-                if authentication_status is True:
-                    print(f"DEBUG: User logged in successfully: {username}")
-                    return True, username
-                elif authentication_status is False:
-                    print(f"DEBUG: Login failed for username: {username}")
-                    return False, username
-                else:
-                    # No login attempt yet
-                    return None, None
+                        
+            except Exception as e:
+                print(f"DEBUG: Login method error: {e}")
+                # Fallback to session state
+                authentication_status = st.session_state.get('authentication_status')
+                username = st.session_state.get('username')
+                name = st.session_state.get('name')
+            
+            if authentication_status is True:
+                print(f"DEBUG: User logged in successfully: {username}")
+                return True, username
+            elif authentication_status is False:
+                print(f"DEBUG: Login failed")
+                return False, username
             else:
-                # Already authenticated
-                return True, self.get_current_user()
+                # No login attempt yet (form is displayed but not submitted)
+                return None, None
+                
         except Exception as e:
             print(f"DEBUG: Error in login: {e}")
             return False, None
@@ -207,3 +201,13 @@ class AuthManager:
     def get_user_display_name(self) -> Optional[str]:
         """Get current user's display name"""
         return st.session_state.get('name')
+    
+    def check_persistent_login(self) -> bool:
+        """Check for persistent login without showing any forms"""
+        try:
+            # Force a re-check of authentication status from cookies
+            self._check_authentication()
+            return self.is_authenticated()
+        except Exception as e:
+            print(f"DEBUG: Error checking persistent login: {e}")
+            return False

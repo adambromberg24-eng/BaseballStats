@@ -33,13 +33,17 @@ def main():
         layout="wide"
     )
 
+    # Initialize authentication manager
     auth_manager = AuthManager()
-
-    # Show authentication status
-    if not auth_manager.is_authenticated():
+    
+    # Check for persistent login first (without showing any forms)
+    is_authenticated = auth_manager.check_persistent_login()
+    
+    if not is_authenticated:
+        # Show login page with proper formatting
         st.title("🔐 Login to Baseball Statistics Aggregator")
         
-        # Check if this is a fresh visit or failed login
+        # Check authentication status for appropriate messaging
         auth_status = st.session_state.get('authentication_status', None)
         if auth_status is False:
             st.error("❌ Session expired or login failed. Please log in again.")
@@ -72,6 +76,7 @@ def main():
                         st.error("❌ Username already exists or registration failed. Please try a different username.")
                 elif submitted:
                     st.warning("⚠️ Please fill in all fields.")
+                    
     else:
         # Authenticated user - show persistent login status
         user = auth_manager.get_current_user()
