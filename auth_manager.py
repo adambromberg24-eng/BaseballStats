@@ -32,8 +32,8 @@ class AuthManager:
     def login(self) -> Tuple[Optional[bool], Optional[str]]:
         """Handle user login"""
         try:
-            # Use the authenticator login method
-            name, authentication_status, username = self.authenticator.login('Login', 'main')
+            # For streamlit-authenticator 0.4.2 - no parameters needed
+            name, authentication_status, username = self.authenticator.login()
             
             if authentication_status is True:
                 return True, username
@@ -49,7 +49,8 @@ class AuthManager:
     def logout(self):
         """Handle user logout"""
         try:
-            self.authenticator.logout('Logout', 'sidebar')
+            # For streamlit-authenticator 0.4.2 - no parameters needed
+            self.authenticator.logout()
             st.session_state['authentication_status'] = None
             st.session_state['username'] = None
             st.session_state['name'] = None
