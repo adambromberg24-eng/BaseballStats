@@ -752,8 +752,19 @@ def my_games_page():
                                 away_pitching['innings_pitched'] = away_pitching['innings_pitched'].apply(format_innings_pitched)
                             # Reorder columns for better presentation
                             columns_order = ['name', 'innings_pitched', 'hits_allowed', 'runs_allowed', 
-                                           'earned_runs', 'walks', 'strikeouts', 'home_runs_allowed']
+                                           'earned_runs', 'walks_allowed', 'strikeouts', 'home_runs_allowed']
                             away_pitching = away_pitching.reindex(columns=[col for col in columns_order if col in away_pitching.columns])
+                            # Rename columns to standard baseball abbreviations
+                            pitching_game_columns = {
+                                'innings_pitched': 'IP',
+                                'hits_allowed': 'H',
+                                'runs_allowed': 'R', 
+                                'earned_runs': 'ER',
+                                'walks_allowed': 'BB',
+                                'strikeouts': 'SO',
+                                'home_runs_allowed': 'HR'
+                            }
+                            away_pitching.rename(columns=pitching_game_columns, inplace=True)
                             st.dataframe(away_pitching, use_container_width=True)
                         else:
                             st.info("No away team pitching data available")
@@ -769,6 +780,8 @@ def my_games_page():
                                 home_pitching['innings_pitched'] = home_pitching['innings_pitched'].apply(format_innings_pitched)
                             # Reorder columns for better presentation
                             home_pitching = home_pitching.reindex(columns=[col for col in columns_order if col in home_pitching.columns])
+                            # Rename columns to standard baseball abbreviations  
+                            home_pitching.rename(columns=pitching_game_columns, inplace=True)
                             st.dataframe(home_pitching, use_container_width=True)
                         else:
                             st.info("No home team pitching data available")
@@ -948,7 +961,7 @@ def player_stats_page():
                 'hits_allowed': 'H',
                 'runs_allowed': 'R',
                 'earned_runs': 'ER',
-                'walks': 'BB',
+                'walks_allowed': 'BB',
                 'strikeouts': 'SO',
                 'home_runs_allowed': 'HR',
                 'earned_run_average': 'ERA',
