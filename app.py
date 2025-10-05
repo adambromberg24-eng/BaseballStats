@@ -113,15 +113,6 @@ def show_main_app(auth_manager):
 
         st.title("⚾ Baseball Statistics Aggregator")
         st.markdown(f"**Welcome back, {user_display}!** 🎉 Track and analyze your MLB game attendance.")
-        
-        # Add a subtle indicator that they're logged in persistently
-        with st.sidebar.expander("🔐 Session Info", expanded=False):
-            st.write("✅ **Persistent Login Active**")  
-            st.write("You'll stay logged in even after refreshing the page!")
-            st.write("Session expires in 30 days unless you logout.")
-
-        st.title("⚾ Baseball Statistics Aggregator")
-        st.markdown("Track and analyze player statistics from MLB games you've attended")
 
         # Sidebar navigation
         if 'page' not in st.session_state:
