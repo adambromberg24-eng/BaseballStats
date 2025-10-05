@@ -36,49 +36,58 @@ def main():
     # Initialize authentication manager
     auth_manager = AuthManager()
     
-    # Check for persistent login first (without showing any forms)
-    is_authenticated = auth_manager.check_persistent_login()
-    
-    if not is_authenticated:
-        # Show login page with proper formatting
-        st.title("🔐 Login to Baseball Statistics Aggregator")
+    # Check if user is authenticated
+    if auth_manager.check_authentication():
+        # Welcome message
+        current_user = auth_manager.get_current_user()
+        display_name = auth_manager.get_user_display_name() or current_user
+        st.success(f"Welcome back, {display_name}! 🎉")
         
-        # Check authentication status for appropriate messaging
-        auth_status = st.session_state.get('authentication_status', None)
-        if auth_status is False:
-            st.error("❌ Session expired or login failed. Please log in again.")
-        elif auth_status is None:
-            st.info("👋 Welcome! Please log in to access your baseball statistics.")
-
-        tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
-
-        with tab1:
-            auth_result, username = auth_manager.login()
-            if auth_result is True:
-                st.success(f"✅ Welcome back, {auth_manager.get_user_display_name() or username}!")
-                st.balloons()
-                time.sleep(1)
-                st.rerun()
-            elif auth_result is False:
-                st.error("❌ Invalid username or password. Please try again.")
-
-        with tab2:
-            with st.form("register_form"):
-                new_username = st.text_input("Username", placeholder="Choose a unique username")
-                new_name = st.text_input("Full Name", placeholder="Your full name")
-                new_email = st.text_input("Email", placeholder="your.email@example.com")
-                new_password = st.text_input("Password", type="password", placeholder="Create a secure password")
-                submitted = st.form_submit_button("🚀 Create Account")
-                if submitted and new_username and new_name and new_email and new_password:
-                    if auth_manager.register_user(new_username, new_name, new_password, new_email):
-                        st.success("🎉 Registration successful! Please log in with your new credentials.")
-                    else:
-                        st.error("❌ Username already exists or registration failed. Please try a different username.")
-                elif submitted:
-                    st.warning("⚠️ Please fill in all fields.")
-                    
+        # Show main application
+        show_main_app(auth_manager)
+        
     else:
-        # Authenticated user - show persistent login status
+        # User is not authenticated, handle login/registration
+        st.title("⚾ Baseball Statistics Aggregator")
+        st.markdown("### 🔐 Please log in to continue")
+        
+        # Create tabs for login and registration
+        login_tab, register_tab = st.tabs(["🔑 Login", "📝 Register"])
+        
+        with login_tab:
+            st.markdown("#### Log in to your account")
+            
+            # Call login - this will show the form and handle authentication
+            login_result = auth_manager.login()
+            
+            if login_result[0] is True:  # Successfully logged in
+                st.success("✅ Login successful!")
+                st.balloons()
+                st.rerun()  # Refresh to show main app
+            elif login_result[0] is False:  # Login failed
+                st.error("❌ Invalid username or password")
+        
+        with register_tab:
+            st.markdown("#### Create a new account")
+            show_registration_form(auth_manager)
+
+def show_registration_form(auth_manager):
+    """Show the registration form"""
+    with st.form("register_form"):
+        new_username = st.text_input("Username", placeholder="Choose a unique username")
+        new_name = st.text_input("Full Name", placeholder="Your full name")
+        new_email = st.text_input("Email", placeholder="your.email@example.com")
+        new_password = st.text_input("Password", type="password", placeholder="Create a secure password")
+        submitted = st.form_submit_button("🚀 Create Account")
+        if submitted and new_username and new_name and new_email and new_password:
+            if auth_manager.register_user(new_username, new_name, new_password, new_email):
+                st.success("🎉 Registration successful! Please log in with your new credentials.")
+            else:
+                st.error("❌ Username already exists or registration failed. Please try a different username.")
+        elif submitted:
+            st.warning("⚠️ Please fill in all fields.")
+
+def show_main_app(auth_manager):
         user = auth_manager.get_current_user()
         user_display = auth_manager.get_user_display_name() or user
 
