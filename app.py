@@ -121,6 +121,8 @@ def show_main_app(auth_manager):
             st.session_state.stats_calculator = StatsCalculator()
         if 'mlb_client' not in st.session_state:
             st.session_state.mlb_client = MLBApiClient()
+        # Store auth_manager in session state for access by page functions
+        st.session_state.auth_manager = auth_manager
 
         # Sidebar with user info and logout
         st.sidebar.markdown("### 👤 User Information")
@@ -161,7 +163,6 @@ def show_main_app(auth_manager):
             export_data_page()
         elif page == "Profile":
             profile_page()
-            export_data_page()
 
 def add_game_page():
     st.header("Add New Game")
