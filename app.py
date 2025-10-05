@@ -821,7 +821,29 @@ def player_stats_page():
                 st.info("All players have played 1 game or less. Showing all available data.")
             filtered_batting = batting_df[batting_df['games'] >= min_games] if 'games' in batting_df.columns else batting_df
             
-            st.dataframe(filtered_batting, use_container_width=True)
+            # Rename columns to standard baseball abbreviations
+            batting_display = filtered_batting.copy()
+            batting_column_names = {
+                'games': 'G',
+                'at_bats': 'AB',
+                'hits': 'H',
+                'runs': 'R',
+                'rbis': 'RBI',
+                'doubles': '2B',
+                'triples': '3B',
+                'home_runs': 'HR',
+                'walks': 'BB',
+                'strikeouts': 'SO',
+                'stolen_bases': 'SB',
+                'caught_stealing': 'CS',
+                'batting_average': 'AVG',
+                'on_base_percentage': 'OBP',
+                'slugging_percentage': 'SLG',
+                'ops': 'OPS'
+            }
+            batting_display.rename(columns=batting_column_names, inplace=True)
+            
+            st.dataframe(batting_display, use_container_width=True)
         else:
             st.info("No batting statistics available.")
     
@@ -862,7 +884,27 @@ def player_stats_page():
                 st.info("All pitchers have pitched 1 game or less. Showing all available data.")
             filtered_pitching = pitching_df[pitching_df['games'] >= min_games] if 'games' in pitching_df.columns else pitching_df
             
-            st.dataframe(filtered_pitching, use_container_width=True)
+            # Rename columns to standard baseball abbreviations
+            pitching_display = filtered_pitching.copy()
+            pitching_column_names = {
+                'games': 'G',
+                'innings_pitched': 'IP',
+                'hits_allowed': 'H',
+                'runs_allowed': 'R',
+                'earned_runs': 'ER',
+                'walks': 'BB',
+                'strikeouts': 'SO',
+                'home_runs_allowed': 'HR',
+                'earned_run_average': 'ERA',
+                'whip': 'WHIP',
+                'wins': 'W',
+                'losses': 'L',
+                'saves': 'SV',
+                'holds': 'HLD'
+            }
+            pitching_display.rename(columns=pitching_column_names, inplace=True)
+            
+            st.dataframe(pitching_display, use_container_width=True)
         else:
             st.info("No pitching statistics available.")
 
