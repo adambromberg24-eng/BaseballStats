@@ -141,7 +141,7 @@ def show_main_app(auth_manager):
         if 'page' not in st.session_state:
             st.session_state.page = "Add Game"
 
-        pages = ["Add Game", "My Games", "Player Stats", "Dashboard", "Export Data"]
+        pages = ["Add Game", "My Games", "Player Stats", "Dashboard", "Export Data", "Profile"]
         for p in pages:
             if st.sidebar.button(p, use_container_width=True):
                 st.session_state.page = p
@@ -158,6 +158,9 @@ def show_main_app(auth_manager):
         elif page == "Dashboard":
             dashboard_page()
         elif page == "Export Data":
+            export_data_page()
+        elif page == "Profile":
+            profile_page()
             export_data_page()
 
 def add_game_page():
@@ -1400,6 +1403,120 @@ def export_data_page():
 
     with col3:
         st.metric("Total Pitchers", len(pitching_stats))
+
+def profile_page():
+    st.header("👤 User Profile")
+    
+    auth_manager = st.session_state.auth_manager
+    current_username = auth_manager.get_current_user()
+    
+    if not current_username:
+        st.error("Not authenticated")
+        return
+    
+    # Get current user info
+    user_info = auth_manager.get_user_info(current_username)
+    if not user_info:
+        st.error("Could not load user information")
+        return
+    
+    st.markdown("### 📝 Update Profile Information")
+    
+    with st.form("profile_form"):
+        st.markdown("**Current Information:**")
+        st.info(f"**Username:** {current_username}")
+        
+        # Profile update fields
+        new_name = st.text_input(
+            "Display Name", 
+            value=user_info.get('name', ''),
+            help="Your display name shown in the app"
+        )
+        
+        new_email = st.text_input(
+            "Email Address", 
+            value=user_info.get('email', ''),
+            help="Your email address"
+        )
+        
+        profile_submitted = st.form_submit_button("💾 Update Profile", type="primary")
+        
+        if profile_submitted:
+            if new_name and new_email:
+                success = auth_manager.update_user_profile(
+                    current_username, 
+                    name=new_name, 
+                    email=new_email
+                )
+                if success:
+                    st.success("✅ Profile updated successfully!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to update profile")
+            else:
+                st.error("❌ Please fill in all fields")
+    
+    st.markdown("---")
+    st.markdown("### 🔐 Change Password")
+    
+    with st.form("password_form"):
+        current_password = st.text_input(
+            "Current Password", 
+            type="password",
+            help="Enter your current password"
+        )
+        
+        new_password = st.text_input(
+            "New Password", 
+            type="password",
+            help="Enter your new password"
+        )
+        
+        confirm_password = st.text_input(
+            "Confirm New Password", 
+            type="password",
+            help="Re-enter your new password"
+        )
+        
+        password_submitted = st.form_submit_button("🔑 Change Password", type="primary")
+        
+        if password_submitted:
+            if not all([current_password, new_password, confirm_password]):
+                st.error("❌ Please fill in all password fields")
+            elif new_password != confirm_password:
+                st.error("❌ New passwords do not match")
+            elif len(new_password) < 6:
+                st.error("❌ New password must be at least 6 characters long")
+            else:
+                success = auth_manager.change_password(
+                    current_username, 
+                    current_password, 
+                    new_password
+                )
+                if success:
+                    st.success("✅ Password changed successfully!")
+                    # Clear the form by rerunning
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Current password is incorrect")
+    
+    st.markdown("---")
+    st.markdown("### ℹ️ Account Information")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("Username", current_username)
+        st.metric("Display Name", user_info.get('name', 'N/A'))
+    
+    with col2:
+        st.metric("Email", user_info.get('email', 'N/A'))
+        
+        # Show game count for this user
+        user_games = st.session_state.data_manager.get_all_games()
+        st.metric("Games Recorded", len(user_games))
 
 if __name__ == "__main__":
     main()

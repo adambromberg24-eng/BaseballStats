@@ -97,3 +97,66 @@ class AuthManager:
         except Exception as e:
             st.error(f"Registration error: {e}")
             return False
+
+    def update_user_profile(self, username: str, name: str = None, email: str = None) -> bool:
+        """Update user profile information (name and email)"""
+        try:
+            if username not in self.config['credentials']['usernames']:
+                return False
+            
+            # Update name if provided
+            if name is not None:
+                self.config['credentials']['usernames'][username]['name'] = name
+                # Update session state if this is the current user
+                if st.session_state.get('username') == username:
+                    st.session_state['name'] = name
+            
+            # Update email if provided
+            if email is not None:
+                self.config['credentials']['usernames'][username]['email'] = email
+            
+            # Save config
+            self._save_config()
+            return True
+            
+        except Exception as e:
+            st.error(f"Profile update error: {e}")
+            return False
+
+    def change_password(self, username: str, current_password: str, new_password: str) -> bool:
+        """Change user password"""
+        try:
+            if username not in self.config['credentials']['usernames']:
+                return False
+            
+            # Verify current password
+            stored_password = self.config['credentials']['usernames'][username]['password']
+            if not stauth.Hasher([current_password]).check([stored_password])[0]:
+                return False
+            
+            # Hash new password
+            hashed_new_password = stauth.Hasher([new_password]).generate()[0]
+            
+            # Update password
+            self.config['credentials']['usernames'][username]['password'] = hashed_new_password
+            
+            # Save config
+            self._save_config()
+            return True
+            
+        except Exception as e:
+            st.error(f"Password change error: {e}")
+            return False
+
+    def get_user_info(self, username: str) -> Optional[dict]:
+        """Get user information"""
+        try:
+            if username in self.config['credentials']['usernames']:
+                user_data = self.config['credentials']['usernames'][username].copy()
+                # Don't return the password
+                user_data.pop('password', None)
+                return user_data
+            return None
+        except Exception as e:
+            st.error(f"Error getting user info: {e}")
+            return None
