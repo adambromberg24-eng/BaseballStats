@@ -823,6 +823,13 @@ def player_stats_page():
             
             # Rename columns to standard baseball abbreviations
             batting_display = filtered_batting.copy()
+            
+            # Format decimal statistics to baseball standard (.xxx format)
+            decimal_columns = ['batting_average', 'on_base_percentage', 'slugging_percentage', 'ops']
+            for col in decimal_columns:
+                if col in batting_display.columns:
+                    batting_display[col] = batting_display[col].apply(lambda x: f"{x:.3f}" if pd.notnull(x) else "")
+            
             batting_column_names = {
                 'games': 'G',
                 'at_bats': 'AB',
@@ -886,6 +893,18 @@ def player_stats_page():
             
             # Rename columns to standard baseball abbreviations
             pitching_display = filtered_pitching.copy()
+            
+            # Format decimal statistics to baseball standard (.xxx format)
+            pitching_decimal_columns = ['earned_run_average', 'whip']
+            for col in pitching_decimal_columns:
+                if col in pitching_display.columns:
+                    if col == 'earned_run_average':
+                        # ERA typically shows 2 decimal places but in x.xx format
+                        pitching_display[col] = pitching_display[col].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
+                    else:  # WHIP
+                        # WHIP typically shows 3 decimal places in x.xxx format
+                        pitching_display[col] = pitching_display[col].apply(lambda x: f"{x:.3f}" if pd.notnull(x) else "")
+            
             pitching_column_names = {
                 'games': 'G',
                 'innings_pitched': 'IP',
