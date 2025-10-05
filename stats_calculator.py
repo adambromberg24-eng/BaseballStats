@@ -41,7 +41,7 @@ class StatsCalculator:
             'walks_allowed': 0,
             'strikeouts': 0,
             'home_runs_allowed': 0,
-            'era': 0.0,
+            'ERA': 0.0,
             'whip': 0.0
         })
         
@@ -181,7 +181,7 @@ class StatsCalculator:
         for player_id, stats in pitching_stats.items():
             # Calculate ERA
             if stats['innings_pitched'] > 0:
-                stats['era'] = round((stats['earned_runs'] * 9) / stats['innings_pitched'], 2)
+                stats['ERA'] = round((stats['earned_runs'] * 9) / stats['innings_pitched'], 2)
             
             # Calculate WHIP
             if stats['innings_pitched'] > 0:

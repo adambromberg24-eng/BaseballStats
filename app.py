@@ -943,10 +943,10 @@ def player_stats_page():
                 pitching_display['innings_pitched'] = pitching_display['innings_pitched'].apply(format_innings_pitched)
             
             # Format decimal statistics to baseball standard (.xxx format)
-            pitching_decimal_columns = ['earned_run_average', 'whip']
+            pitching_decimal_columns = ['ERA', 'whip']
             for col in pitching_decimal_columns:
                 if col in pitching_display.columns:
-                    if col == 'earned_run_average':
+                    if col == 'ERA':
                         # ERA typically shows 2 decimal places but in x.xx format (keep leading zero)
                         pitching_display[col] = pitching_display[col].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
                     else:  # WHIP
@@ -964,7 +964,7 @@ def player_stats_page():
                 'walks_allowed': 'BB',
                 'strikeouts': 'SO',
                 'home_runs_allowed': 'HR',
-                'earned_run_average': 'ERA',
+                'ERA': 'ERA',
                 'whip': 'WHIP',
                 'wins': 'W',
                 'losses': 'L',
