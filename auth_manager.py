@@ -32,8 +32,12 @@ class AuthManager:
     def login(self) -> Tuple[Optional[bool], Optional[str]]:
         """Handle user login"""
         try:
-            # For streamlit-authenticator 0.4.2 - no parameters needed
-            name, authentication_status, username = self.authenticator.login()
+            # For streamlit-authenticator 0.4.2 - login() doesn't return values, just updates session state
+            self.authenticator.login()
+            
+            # Get authentication status from session state
+            authentication_status = st.session_state.get('authentication_status')
+            username = st.session_state.get('username')
             
             if authentication_status is True:
                 return True, username
