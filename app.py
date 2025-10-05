@@ -26,6 +26,29 @@ def format_game_display_name(game):
     
     return base_name
 
+def format_innings_pitched(innings):
+    """Format innings pitched in baseball standard format (e.g., 6.1, 6.2, 7.0)"""
+    if pd.isna(innings) or innings is None:
+        return ""
+    
+    # Convert decimal innings to baseball format
+    # In baseball: .333 = .1 (1 out), .667 = .2 (2 outs), 1.0 = full inning
+    full_innings = int(innings)
+    partial = innings - full_innings
+    
+    # Convert partial innings to outs (thirds)
+    if abs(partial - 0.333) < 0.05:  # 1 out
+        return f"{full_innings}.1"
+    elif abs(partial - 0.667) < 0.05:  # 2 outs  
+        return f"{full_innings}.2"
+    elif partial < 0.2:  # Close to 0, round down to full innings
+        return f"{full_innings}.0"
+    elif partial > 0.8:  # Close to 1, round up to next full inning
+        return f"{full_innings + 1}.0"
+    else:
+        # For other values, use the standard decimal format
+        return f"{innings:.1f}"
+
 def main():
     st.set_page_config(
         page_title="Baseball Statistics Aggregator",
@@ -724,6 +747,9 @@ def my_games_page():
                         away_pitching_data = game.get('away_team_pitching', [])
                         if away_pitching_data:
                             away_pitching = pd.DataFrame(away_pitching_data)
+                            # Format innings pitched
+                            if 'innings_pitched' in away_pitching.columns:
+                                away_pitching['innings_pitched'] = away_pitching['innings_pitched'].apply(format_innings_pitched)
                             # Reorder columns for better presentation
                             columns_order = ['name', 'innings_pitched', 'hits_allowed', 'runs_allowed', 
                                            'earned_runs', 'walks', 'strikeouts', 'home_runs_allowed']
@@ -738,6 +764,9 @@ def my_games_page():
                         home_pitching_data = game.get('home_team_pitching', [])
                         if home_pitching_data:
                             home_pitching = pd.DataFrame(home_pitching_data)
+                            # Format innings pitched
+                            if 'innings_pitched' in home_pitching.columns:
+                                home_pitching['innings_pitched'] = home_pitching['innings_pitched'].apply(format_innings_pitched)
                             # Reorder columns for better presentation
                             home_pitching = home_pitching.reindex(columns=[col for col in columns_order if col in home_pitching.columns])
                             st.dataframe(home_pitching, use_container_width=True)
@@ -874,7 +903,7 @@ def player_stats_page():
                 st.metric("Total Pitchers Seen", len(pitching_df))
                 if 'innings_pitched' in pitching_df.columns:
                     total_ip = pitching_df['innings_pitched'].sum()
-                    st.metric("Total Innings Pitched", f"{total_ip:.1f}")
+                    st.metric("Total Innings Pitched", format_innings_pitched(total_ip))
             
             with col2:
                 if 'strikeouts' in pitching_df.columns:
@@ -895,6 +924,10 @@ def player_stats_page():
             
             # Rename columns to standard baseball abbreviations
             pitching_display = filtered_pitching.copy()
+            
+            # Format innings pitched to baseball standard (e.g., 6.1, 6.2, 7.0)
+            if 'innings_pitched' in pitching_display.columns:
+                pitching_display['innings_pitched'] = pitching_display['innings_pitched'].apply(format_innings_pitched)
             
             # Format decimal statistics to baseball standard (.xxx format)
             pitching_decimal_columns = ['earned_run_average', 'whip']
