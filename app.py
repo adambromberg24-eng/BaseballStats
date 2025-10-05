@@ -828,7 +828,9 @@ def player_stats_page():
             decimal_columns = ['batting_average', 'on_base_percentage', 'slugging_percentage', 'ops']
             for col in decimal_columns:
                 if col in batting_display.columns:
-                    batting_display[col] = batting_display[col].apply(lambda x: f"{x:.3f}" if pd.notnull(x) else "")
+                    batting_display[col] = batting_display[col].apply(
+                        lambda x: f"{x:.3f}".lstrip('0') if pd.notnull(x) and x < 1 else f"{x:.3f}" if pd.notnull(x) else ""
+                    )
             
             batting_column_names = {
                 'games': 'G',
@@ -899,11 +901,13 @@ def player_stats_page():
             for col in pitching_decimal_columns:
                 if col in pitching_display.columns:
                     if col == 'earned_run_average':
-                        # ERA typically shows 2 decimal places but in x.xx format
+                        # ERA typically shows 2 decimal places but in x.xx format (keep leading zero)
                         pitching_display[col] = pitching_display[col].apply(lambda x: f"{x:.2f}" if pd.notnull(x) else "")
                     else:  # WHIP
-                        # WHIP typically shows 3 decimal places in x.xxx format
-                        pitching_display[col] = pitching_display[col].apply(lambda x: f"{x:.3f}" if pd.notnull(x) else "")
+                        # WHIP typically shows 3 decimal places, remove leading zero if < 1
+                        pitching_display[col] = pitching_display[col].apply(
+                            lambda x: f"{x:.3f}".lstrip('0') if pd.notnull(x) and x < 1 else f"{x:.3f}" if pd.notnull(x) else ""
+                        )
             
             pitching_column_names = {
                 'games': 'G',
